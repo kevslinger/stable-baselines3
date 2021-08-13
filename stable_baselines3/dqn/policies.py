@@ -174,6 +174,9 @@ class DQNPolicy(BasePolicy):
     def _predict(self, obs: th.Tensor, deterministic: bool = True) -> th.Tensor:
         return self.q_net._predict(obs, deterministic=deterministic)
 
+    def _get_q_values(self, obs: th.Tensor) -> th.Tensor:
+        return self.q_net.forward(obs)
+
     def _get_constructor_parameters(self) -> Dict[str, Any]:
         data = super()._get_constructor_parameters()
 
