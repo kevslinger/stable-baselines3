@@ -19,6 +19,7 @@ from stable_baselines3.common.utils import safe_mean, should_collect_more_steps
 from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 from stable_baselines3.her.subgoal_her_replay_buffer import SubgoalHerReplayBuffer
+from stable_baselines3.her.recurrent_her_replay_buffer import RecurrentHerReplayBuffer
 
 
 class OffPolicyAlgorithm(BaseAlgorithm):
@@ -186,7 +187,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             else:
                 self.replay_buffer_class = ReplayBuffer
 
-        elif self.replay_buffer_class == HerReplayBuffer or self.replay_buffer_class == SubgoalHerReplayBuffer:
+        elif self.replay_buffer_class == HerReplayBuffer or self.replay_buffer_class == SubgoalHerReplayBuffer or \
+                self.replay_buffer_class == RecurrentHerReplayBuffer:
             assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
 
             # If using offline sampling, we need a classic replay buffer too
