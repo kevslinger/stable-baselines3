@@ -209,6 +209,7 @@ class RecurrentHerReplayBuffer(DictReplayBuffer):
         """
         if self.replay_buffer is not None:
             return self.replay_buffer.sample(batch_size, env)
+        #print(self._sample_transitions(batch_size, maybe_vec_env=env, online_sampling=True))
         return self._sample_transitions(batch_size, maybe_vec_env=env, online_sampling=True)  # pytype: disable=bad-return-type
 
     def _sample_offline(
