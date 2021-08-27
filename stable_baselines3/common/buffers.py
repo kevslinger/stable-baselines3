@@ -221,6 +221,8 @@ class ReplayBuffer(BaseBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
+        self.reward_frac = []
+
     def add(
         self,
         obs: np.ndarray,
@@ -270,7 +272,10 @@ class ReplayBuffer(BaseBuffer):
             batch_inds = (np.random.randint(1, self.buffer_size, size=batch_size) + self.pos) % self.buffer_size
         else:
             batch_inds = np.random.randint(0, self.pos, size=batch_size)
-        return self._get_samples(batch_inds, env=env)
+        minibatch = self._get_samples(batch_inds, env=env)
+        reward_fraction = (len(minibatch.rewards) - th.count_nonzero(minibatch.rewards)) / len(minibatch.rewards)
+        self.reward_frac.append(reward_fraction)
+        return minibatch
 
     def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> ReplayBufferSamples:
 

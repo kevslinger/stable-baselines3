@@ -151,6 +151,9 @@ class HerReplayBuffer(DictReplayBuffer):
         # episode length storage, needed for episodes which has less steps than the maximum length
         self.episode_lengths = np.zeros(self.max_episode_stored, dtype=np.int64)
 
+        self.reward_frac = []
+        self.occluded_goal_frac = []
+
     def __getstate__(self) -> Dict[str, Any]:
         """
         Gets state for pickling.
@@ -209,7 +212,12 @@ class HerReplayBuffer(DictReplayBuffer):
         """
         if self.replay_buffer is not None:
             return self.replay_buffer.sample(batch_size, env)
-        return self._sample_transitions(batch_size, maybe_vec_env=env, online_sampling=True)  # pytype: disable=bad-return-type
+        minibatch =  self._sample_transitions(batch_size, maybe_vec_env=env, online_sampling=True)  # pytype: disable=bad-return-type
+        reward_fraction = (len(minibatch.rewards) - th.count_nonzero(minibatch.rewards)) / len(minibatch.rewards)
+        self.reward_frac.append(reward_fraction)
+        occluded_goal_fraction = th.count_nonzero(minibatch.observations['desired_goal']) / len(minibatch.observations['desired_goal'])
+        self.occluded_goal_frac.append(occluded_goal_fraction)
+        return minibatch
 
     def _sample_offline(
         self,
