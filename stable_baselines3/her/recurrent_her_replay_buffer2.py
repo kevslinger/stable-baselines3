@@ -57,7 +57,7 @@ class RecurrentHerReplayBuffer2(HerReplayBuffer):
         handle_timeout_termination: bool = True,
     ):
 
-        super(RecurrentHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
+        super(RecurrentHerReplayBuffer2, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                              goal_selection_strategy, online_sampling, handle_timeout_termination)
 
     def sample_goals(
@@ -95,7 +95,9 @@ class RecurrentHerReplayBuffer2(HerReplayBuffer):
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
         #print("STOP")
         #print(self.goal_shape[0]/self.env.envs[0].hist_len)
-        return self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
+
+        #return self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
+        return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices][:, :, :], 1)
         #return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices][:, :, -int(self.goal_shape[0]/self.env.envs[0].hist_len):], self.env.envs[0].hist_len)
         #return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices], self.env.envs[0].hist_len)
 
