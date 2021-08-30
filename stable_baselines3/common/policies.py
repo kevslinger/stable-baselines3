@@ -319,6 +319,61 @@ class BasePolicy(BaseModel):
 
         return actions, state
 
+    def get_q_values(
+        self,
+        observation: Union[np.ndarray, Dict[str, np.ndarray]],
+    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """
+        Get the policy action and state from an observation (and optional state).
+        Includes sugar-coating to handle different observations (e.g. normalizing images).
+
+        :param observation: the input observation
+        :param state: The last states (can be None, used in recurrent policies)
+        :param mask: The last masks (can be None, used in recurrent policies)
+        :param deterministic: Whether or not to return deterministic actions.
+        :return: the model's action and the next state
+            (used in recurrent policies)
+        """
+        # TODO (GH/1): add support for RNN policies
+        # if state is None:
+        #     state = self.initial_state
+        # if mask is None:
+        #     mask = [False for _ in range(self.n_envs)]
+
+        vectorized_env = False
+        if isinstance(observation, dict):
+            # need to copy the dict as the dict in VecFrameStack will become a torch tensor
+            observation = copy.deepcopy(observation)
+            for key, obs in observation.items():
+                obs_space = self.observation_space.spaces[key]
+                if is_image_space(obs_space):
+                    obs_ = maybe_transpose(obs, obs_space)
+                else:
+                    obs_ = np.array(obs)
+                vectorized_env = vectorized_env or is_vectorized_observation(obs_, obs_space)
+                # Add batch dimension if needed
+                observation[key] = obs_.reshape((-1,) + self.observation_space[key].shape)
+
+        elif is_image_space(self.observation_space):
+            # Handle the different cases for images
+            # as PyTorch use channel first format
+            observation = maybe_transpose(observation, self.observation_space)
+
+        else:
+            observation = np.array(observation)
+
+        if not isinstance(observation, dict):
+            # Dict obs need to be handled separately
+            vectorized_env = is_vectorized_observation(observation, self.observation_space)
+            # Add batch dimension if needed
+            observation = observation.reshape((-1,) + self.observation_space.shape)
+
+        observation = obs_as_tensor(observation, self.device)
+
+        with th.no_grad():
+            q_map = self._get_q_values(observation)
+        return q_map
+
     def scale_action(self, action: np.ndarray) -> np.ndarray:
         """
         Rescale the action from [low, high] to [-1, 1]
