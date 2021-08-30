@@ -214,9 +214,9 @@ class HerReplayBuffer(DictReplayBuffer):
             return self.replay_buffer.sample(batch_size, env)
         minibatch =  self._sample_transitions(batch_size, maybe_vec_env=env, online_sampling=True)  # pytype: disable=bad-return-type
         reward_fraction = (len(minibatch.rewards) - th.count_nonzero(minibatch.rewards)) / len(minibatch.rewards)
-        self.reward_frac.append(reward_fraction)
+        self.reward_frac.append(reward_fraction.item())
         occluded_goal_fraction = th.count_nonzero(minibatch.observations['desired_goal']) / len(minibatch.observations['desired_goal'])
-        self.occluded_goal_frac.append(occluded_goal_fraction)
+        self.occluded_goal_frac.append(occluded_goal_fraction.item())
         return minibatch
 
     def _sample_offline(
