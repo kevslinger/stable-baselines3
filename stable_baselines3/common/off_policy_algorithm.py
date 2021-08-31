@@ -185,9 +185,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             else:
                 self.replay_buffer_class = ReplayBuffer
 
-        elif self.replay_buffer_class == HerReplayBuffer or self.replay_buffer_class == SubgoalHerReplayBuffer or \
-                self.replay_buffer_class == RecurrentHerReplayBuffer or self.replay_buffer_class == RecurrentHerReplayBuffer2 or \
-                self.replay_buffer_class == BeliefHerReplayBuffer or self.replay_buffer_class == RecurrentBeliefHerReplayBuffer:
+        elif issubclass(self.replay_buffer_class, HerReplayBuffer):
             assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
 
             # If using offline sampling, we need a classic replay buffer too
