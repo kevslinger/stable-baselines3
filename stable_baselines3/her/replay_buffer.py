@@ -40,7 +40,7 @@ def get_time_limit(env: VecEnv, current_max_episode_length: Optional[int]) -> in
     return current_max_episode_length
 
 
-class HerReplayBuffer(DictReplayBuffer):
+class ReplayBuffer(DictReplayBuffer):
     """
     Hindsight Experience Replay (HER) buffer.
     Paper: https://arxiv.org/abs/1707.01495
@@ -84,7 +84,7 @@ class HerReplayBuffer(DictReplayBuffer):
         handle_timeout_termination: bool = True,
     ):
 
-        super(HerReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
+        super(ReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
 
         # convert goal_selection_strategy into GoalSelectionStrategy if string
         if isinstance(goal_selection_strategy, str):
@@ -349,8 +349,8 @@ class HerReplayBuffer(DictReplayBuffer):
         transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
 
         # sample new desired goals and relabel the transitions
-        new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
-        transitions["desired_goal"][her_indices] = new_goals
+        #new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
+        #transitions["desired_goal"][her_indices] = new_goals
 
         # Convert info buffer to numpy array
         transitions["info"] = np.array(
@@ -359,7 +359,8 @@ class HerReplayBuffer(DictReplayBuffer):
                 for episode_idx, transition_idx in zip(episode_indices, transitions_indices)
             ]
         )
-
+        #TODO:
+        her_indices = []
         # Edge case: episode of one timesteps with the future strategy
         # no virtual transition can be created
         if len(her_indices) > 0:
