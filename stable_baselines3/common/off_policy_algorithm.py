@@ -17,7 +17,8 @@ from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn, Schedule, TrainFreq, TrainFrequencyUnit
 from stable_baselines3.common.utils import safe_mean, should_collect_more_steps
 from stable_baselines3.common.vec_env import VecEnv
-from stable_baselines3.her import HerReplayBuffer, SubgoalHerReplayBuffer, RecurrentHerReplayBuffer, RecurrentHerReplayBuffer2, BeliefHerReplayBuffer, RecurrentBeliefHerReplayBuffer
+from stable_baselines3.her import HerReplayBuffer
+from stable_baselines3 import her
 
 
 class OffPolicyAlgorithm(BaseAlgorithm):
@@ -262,7 +263,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             self.replay_buffer.handle_timeout_termination = False
             self.replay_buffer.timeouts = np.zeros_like(self.replay_buffer.dones)
 
-        if isinstance(self.replay_buffer, HerReplayBuffer):
+        if isinstance(self.replay_buffer, HerReplayBuffer) or isinstance(self.replay_buffer, her.ReplayBuffer):
             assert self.env is not None, "You must pass an environment at load time when using `HerReplayBuffer`"
             self.replay_buffer.set_env(self.get_env())
             if truncate_last_traj:
