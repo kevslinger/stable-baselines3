@@ -289,7 +289,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         # Special case when using HerReplayBuffer,
         # the classic replay buffer is inside it when using offline sampling
-        if isinstance(self.replay_buffer, HerReplayBuffer):
+        if isinstance(self.replay_buffer, HerReplayBuffer) or isinstance(self.replay_buffer, her.ReplayBuffer):
             replay_buffer = self.replay_buffer.replay_buffer
         else:
             replay_buffer = self.replay_buffer
