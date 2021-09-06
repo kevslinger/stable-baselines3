@@ -6,6 +6,7 @@ import numpy as np
 import torch as th
 import matplotlib.pyplot as plt
 from matplotlib.image import NonUniformImage
+import os
 
 from stable_baselines3.common.buffers import DictReplayBuffer
 from stable_baselines3.common.preprocessing import get_obs_shape
@@ -557,7 +558,7 @@ class HerReplayBuffer(DictReplayBuffer):
             # update "full" indicator
             self.full = self.full or self.pos == 0
 
-    def get_heatmap(self, n_calls, bin_range=0.1):
+    def get_heatmap(self, n_calls, bin_range=0.01, plot=False):
         """Get a heatmap of the goals in the buffer"""
         x_min, x_max = self.env.envs[0].x_left_limit, self.env.envs[0].x_right_limit
         y_min, y_max = self.env.envs[0].y_down_limit, self.env.envs[0].y_up_limit
@@ -576,15 +577,23 @@ class HerReplayBuffer(DictReplayBuffer):
 
         self.H_T += H.T
 
-        xcenters = (xedges[:-1] + xedges[1:]) / 2
-        ycenters = (yedges[:-1] + yedges[1:]) / 2
+        if not os.path.exists(os.path.join(os.getcwd(), 'testHeatmap')):
+            os.mkdir(os.path.join(os.getcwd(), 'testHeatmap'))
+        with open(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}.npy'), 'w') as f:
+            np.save(f, H.T)
+        with open(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}_cumulative.npy'), 'w') as f:
+            np.save(f, self.H_T)
 
-        fig, ax = plt.subplots()
-        plt.title(f'Heatmap of Goals, {type(self).__name__}, iteration {n_calls}')
-        plt.xlim([xedges[0], xedges[-1]])
-        plt.ylim([yedges[0], yedges[-1]])
-        im = NonUniformImage(ax, interpolation='bilinear')
-        im.set_data(xcenters, ycenters, self.H_T)
-        ax.images.append(im)
-        #im.colorbar()
-        plt.savefig(f'/home/kevin/Desktop/test/{type(self).__name__}_{n_calls}.png')
+
+        if plot:
+            xcenters = (xedges[:-1] + xedges[1:]) / 2
+            ycenters = (yedges[:-1] + yedges[1:]) / 2
+            fig, ax = plt.subplots()
+            plt.title(f'Heatmap of Goals, {type(self).__name__}, iteration {n_calls}')
+            plt.xlim([xedges[0], xedges[-1]])
+            plt.ylim([yedges[0], yedges[-1]])
+            im = NonUniformImage(ax, interpolation='bilinear')
+            im.set_data(xcenters, ycenters, self.H_T)
+            ax.images.append(im)
+            #im.colorbar()
+            plt.savefig(f'/home/kevin/Desktop/test/{type(self).__name__}_{n_calls}.png')
