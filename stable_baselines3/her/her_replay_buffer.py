@@ -158,7 +158,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self.reward_frac = []
         self.occluded_goal_frac = []
 
-        self.H_T = np.zeros((8, 5))
+        self.H_T = np.zeros((80, 50))
 
     def __getstate__(self) -> Dict[str, Any]:
         """
@@ -579,10 +579,8 @@ class HerReplayBuffer(DictReplayBuffer):
 
         if not os.path.exists(os.path.join(os.getcwd(), 'testHeatmap')):
             os.mkdir(os.path.join(os.getcwd(), 'testHeatmap'))
-        with open(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}.npy'), 'w') as f:
-            np.save(f, H.T)
-        with open(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}_cumulative.npy'), 'w') as f:
-            np.save(f, self.H_T)
+        np.save(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}.npy'), H.T)
+        np.save(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}_cumulative.npy'), self.H_T)
 
 
         if plot:
