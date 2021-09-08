@@ -567,12 +567,9 @@ class HerReplayBuffer(DictReplayBuffer):
 
         sample = self._sample_transitions(256, self._vec_normalize_env, online_sampling=True)
 
-        print(sample.observations['desired_goal'])
         goals_x, goals_y = np.hsplit(sample.observations['desired_goal'][:, -2:], 2)
         goals_x = goals_x.flatten().cpu().numpy()
         goals_y = goals_y.flatten().cpu().numpy()
-        print(goals_x)
-        print(goals_y)
         H, xedges, yedges = np.histogram2d(goals_x, goals_y, bins=(x_bins, y_bins))
 
         self.H_T += H.T

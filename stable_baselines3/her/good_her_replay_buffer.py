@@ -60,28 +60,34 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         super(GoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                   goal_selection_strategy, online_sampling, handle_timeout_termination)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray) -> np.ndarray:
-        """A good goal is defined as a goal that is not occluded. """
+    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 3) -> np.ndarray:
+        """A good goal is defined as a goal that is not occluded.
+        Arguments:
+            her_indices: (numpy ndarray) The list of episodes which should be relabeled
+            transition_indices: (numpy ndarray) The list of transition indices which should be relabeled
+            goal_dim: (int) The dimensionality of the environment's goal
+        Returns:
+            new_goals: (numpy ndarray) the newly relabeled goals from `her_indices` epidoes and `transition_indices`
+            """
         new_goals = []
         for idx, indices in enumerate(zip(her_indices, transition_indices)):
             her_index, transition_index = indices
             #print(indices)
             #print(her_index)
             #print(transition_index)
-            # TODO: cheating because my goal space is 2
             achieved_goal = self._buffer['achieved_goal'][her_index, transition_index][0]
             #print(achieved_goal)
             #print(len(achieved_goal))
             added_flag = False
-            for ag_idx in range(1, int(len(achieved_goal)/2) + 1):
-                sample_goal = achieved_goal[-2*ag_idx:][:2]
-                if not np.array_equal(sample_goal, np.zeros(2)):
+            for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
+                sample_goal = achieved_goal[-goal_dim*ag_idx:][:goal_dim]
+                if not np.array_equal(sample_goal, np.zeros(goal_dim)):
                     new_goals.append([sample_goal])
                     added_flag = True
                     break
             # If we haven't added to new goals, just keep the same desired goal
             if not added_flag:
-                new_goals.append([self._buffer['desired_goal'][her_index, transition_index][0][-2:]])
+                new_goals.append([self._buffer['desired_goal'][her_index, transition_index][0][-goal_dim:]])
                 #print(new_goals)
 
         return np.array(new_goals)

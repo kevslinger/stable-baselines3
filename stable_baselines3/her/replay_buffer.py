@@ -12,7 +12,7 @@ from stable_baselines3.common.preprocessing import get_obs_shape
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize, unwrap_vec_normalize
 from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
-
+from stable_baselines3.her import HerReplayBuffer
 
 def get_time_limit(env: VecEnv, current_max_episode_length: Optional[int]) -> int:
     """
@@ -40,7 +40,7 @@ def get_time_limit(env: VecEnv, current_max_episode_length: Optional[int]) -> in
     return current_max_episode_length
 
 
-class ReplayBuffer(DictReplayBuffer):
+class ReplayBuffer(HerReplayBuffer):
     """
     Hindsight Experience Replay (HER) buffer.
     Paper: https://arxiv.org/abs/1707.01495
@@ -84,80 +84,9 @@ class ReplayBuffer(DictReplayBuffer):
         handle_timeout_termination: bool = True,
     ):
 
-        super(ReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
+        super(ReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
+                                           goal_selection_strategy, online_sampling, handle_timeout_termination)
 
-        # convert goal_selection_strategy into GoalSelectionStrategy if string
-        if isinstance(goal_selection_strategy, str):
-            self.goal_selection_strategy = KEY_TO_GOAL_STRATEGY[goal_selection_strategy.lower()]
-        else:
-            self.goal_selection_strategy = goal_selection_strategy
-
-        # check if goal_selection_strategy is valid
-        assert isinstance(
-            self.goal_selection_strategy, GoalSelectionStrategy
-        ), f"Invalid goal selection strategy, please use one of {list(GoalSelectionStrategy)}"
-
-        self.n_sampled_goal = n_sampled_goal
-        # if we sample her transitions online use custom replay buffer
-        self.online_sampling = online_sampling
-        # compute ratio between HER replays and regular replays in percent for online HER sampling
-        self.her_ratio = 1 - (1.0 / (self.n_sampled_goal + 1))
-        # maximum steps in episode
-        self.max_episode_length = get_time_limit(env, max_episode_length)
-        # storage for transitions of current episode for offline sampling
-        # for online sampling, it replaces the "classic" replay buffer completely
-        her_buffer_size = buffer_size if online_sampling else self.max_episode_length
-
-        self.env = env
-        self._vec_normalize_env = unwrap_vec_normalize(env)
-        self.buffer_size = her_buffer_size
-
-        if online_sampling:
-            replay_buffer = None
-        self.replay_buffer = replay_buffer
-        self.online_sampling = online_sampling
-
-        # Handle timeouts termination properly if needed
-        # see https://github.com/DLR-RM/stable-baselines3/issues/284
-        self.handle_timeout_termination = handle_timeout_termination
-
-        # buffer with episodes
-        # number of episodes which can be stored until buffer size is reached
-        self.max_episode_stored = self.buffer_size // self.max_episode_length
-        self.current_idx = 0
-        # Counter to prevent overflow
-        self.episode_steps = 0
-
-        # Get shape of observation and goal (usually the same)
-        self.obs_shape = get_obs_shape(self.env.observation_space.spaces["observation"])
-        self.goal_shape = get_obs_shape(self.env.observation_space.spaces["achieved_goal"])
-
-        # input dimensions for buffer initialization
-        input_shape = {
-            "observation": (self.env.num_envs,) + self.obs_shape,
-            "achieved_goal": (self.env.num_envs,) + self.goal_shape,
-            "desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "action": (self.action_dim,),
-            "reward": (1,),
-            "next_obs": (self.env.num_envs,) + self.obs_shape,
-            "next_achieved_goal": (self.env.num_envs,) + self.goal_shape,
-            "next_desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "done": (1,),
-        }
-        self._observation_keys = ["observation", "achieved_goal", "desired_goal"]
-        self._buffer = {
-            key: np.zeros((self.max_episode_stored, self.max_episode_length, *dim), dtype=np.float32)
-            for key, dim in input_shape.items()
-        }
-        # Store info dicts are it can be used to compute the reward (e.g. continuity cost)
-        self.info_buffer = [deque(maxlen=self.max_episode_length) for _ in range(self.max_episode_stored)]
-        # episode length storage, needed for episodes which has less steps than the maximum length
-        self.episode_lengths = np.zeros(self.max_episode_stored, dtype=np.int64)
-
-        self.reward_frac = []
-        self.occluded_goal_frac = []
-
-        self.H_T = np.zeros((8, 5))
 
     def __getstate__(self) -> Dict[str, Any]:
         """
@@ -557,35 +486,3 @@ class ReplayBuffer(DictReplayBuffer):
             self.pos = (self.pos + 1) % self.max_episode_stored
             # update "full" indicator
             self.full = self.full or self.pos == 0
-
-    def get_heatmap(self, n_calls, bin_range=0.1):
-        """Get a heatmap of the goals in the buffer"""
-        x_min, x_max = self.env.envs[0].x_left_limit, self.env.envs[0].x_right_limit
-        y_min, y_max = self.env.envs[0].y_down_limit, self.env.envs[0].y_up_limit
-        x_bins = np.arange(x_min, x_max + bin_range, bin_range)
-        y_bins = np.arange(y_min, y_max + bin_range, bin_range)
-
-        sample = self._sample_transitions(256, self._vec_normalize_env, online_sampling=True)
-
-        print(sample.observations['desired_goal'])
-        goals_x, goals_y = np.hsplit(sample.observations['desired_goal'][:, -2:], 2)
-        goals_x = goals_x.flatten().cpu().numpy()
-        goals_y = goals_y.flatten().cpu().numpy()
-        print(goals_x)
-        print(goals_y)
-        H, xedges, yedges = np.histogram2d(goals_x, goals_y, bins=(x_bins, y_bins))
-
-        self.H_T += H.T
-
-        xcenters = (xedges[:-1] + xedges[1:]) / 2
-        ycenters = (yedges[:-1] + yedges[1:]) / 2
-
-        fig, ax = plt.subplots()
-        plt.title(f'Heatmap of Goals, {type(self).__name__}, iteration {n_calls}')
-        plt.xlim([xedges[0], xedges[-1]])
-        plt.ylim([yedges[0], yedges[-1]])
-        im = NonUniformImage(ax, interpolation='bilinear')
-        im.set_data(xcenters, ycenters, self.H_T)
-        ax.images.append(im)
-        #im.colorbar()
-        plt.savefig(f'/home/kevin/Desktop/test/{type(self).__name__}_{n_calls}.png')
