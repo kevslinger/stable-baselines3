@@ -5,5 +5,6 @@ from stable_baselines3.her.recurrent_her_replay_buffer import RecurrentHerReplay
 from stable_baselines3.her.recurrent_her_replay_buffer2 import RecurrentHerReplayBuffer2
 from stable_baselines3.her.belief_her_replay_buffer import BeliefHerReplayBuffer
 from stable_baselines3.her.rbelief_her_replay_buffer import RecurrentBeliefHerReplayBuffer
+from stable_baselines3.her.rgood_her_replay_buffer import RecurrentGoodHerReplayBuffer
 from stable_baselines3.her.good_her_replay_buffer import GoodHerReplayBuffer
 from stable_baselines3.her.replay_buffer import ReplayBuffer

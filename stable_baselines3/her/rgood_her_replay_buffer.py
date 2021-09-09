@@ -13,7 +13,7 @@ from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, 
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
 
-class GoodHerReplayBuffer(HerReplayBuffer):
+class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
     """
     Hindsight Experience Replay (HER) buffer.
     Paper: https://arxiv.org/abs/1707.01495
@@ -57,7 +57,7 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         handle_timeout_termination: bool = True,
     ):
 
-        super(GoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
+        super(RecurrentGoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                   goal_selection_strategy, online_sampling, handle_timeout_termination)
 
     def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 3) -> np.ndarray:
@@ -126,7 +126,7 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         else:
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
-        return self.get_good_goals(her_episode_indices, transitions_indices)
+        return np.tile(self.get_good_goals(her_episode_indices, transitions_indices), self.env.envs[0].hist_len)
         #self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
 
     def _sample_transitions(
