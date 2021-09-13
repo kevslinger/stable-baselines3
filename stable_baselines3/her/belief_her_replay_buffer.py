@@ -180,7 +180,20 @@ class BeliefHerReplayBuffer(HerReplayBuffer):
         # print("After printing desired goal stuff")
         # print("info")
         # print([[info[0]['state']] for info in transitions['info']])
-        transitions['desired_goal'][her_indices] = np.array([[info[0]['state']] for info in transitions['info']])[her_indices]
+        #print(transitions['info'])
+        her_episode_indices = episode_indices[her_indices]
+        transitions_indices = np.random.randint(
+            transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
+        )
+        transitions['desired_goal'][her_indices] = np.array([[info[0]['state']] for info in \
+                                                             np.array([
+                                                                 self.info_buffer[episode_idx][transition_idx]
+                                                                 for episode_idx, transition_idx in zip(her_episode_indices, transitions_indices)
+                                                             ])])
+        #print(transitions['desired_goal'])
+        #print(transitions['desired_goal'][her_indices])
+        #print([[obs, goal] for obs, goal in zip(transitions['observation'], transitions['desired_goal'])])
+        #print('*********************************')
         #print(transitions['desired_goal'])
 
         # Edge case: episode of one timesteps with the future strategy

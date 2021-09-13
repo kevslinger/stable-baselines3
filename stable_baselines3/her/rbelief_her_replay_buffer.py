@@ -181,7 +181,15 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         # print(transitions['desired_goal'][her_indices])
         # print("info")
         # print(transitions['info'])
-        transitions['desired_goal'][her_indices] = np.tile(np.array([[info[0]['state']] for info in transitions['info']]), self.env.envs[0].hist_len)[her_indices]
+        her_episode_indices = episode_indices[her_indices]
+        transitions_indices = np.random.randint(
+            transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
+        )
+        transitions['desired_goal'][her_indices] = np.tile(np.array([[info[0]['state']] for info in \
+                                                                     np.array([
+                                                                         self.info_buffer[episode_idx][transition_idx]
+                                                                         for episode_idx, transition_idx in zip(her_episode_indices, transitions_indices)
+                                                                     ])]), self.env.envs[0].hist_len)
 
         # Edge case: episode of one timesteps with the future strategy
         # no virtual transition can be created
