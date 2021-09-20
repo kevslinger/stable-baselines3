@@ -160,46 +160,6 @@ class HerReplayBuffer(DictReplayBuffer):
 
         self.H_T = np.zeros((80, 50))
 
-    def __getstate__(self) -> Dict[str, Any]:
-        """
-        Gets state for pickling.
-
-        Excludes self.env, as in general Env's may not be pickleable.
-        Note: when using offline sampling, this will also save the offline replay buffer.
-        """
-        state = self.__dict__.copy()
-        # these attributes are not pickleable
-        del state["env"]
-        return state
-
-    def __setstate__(self, state: Dict[str, Any]) -> None:
-        """
-        Restores pickled state.
-
-        User must call ``set_env()`` after unpickling before using.
-
-        :param state:
-        """
-        self.__dict__.update(state)
-        assert "env" not in state
-        self.env = None
-
-    def set_env(self, env: VecEnv) -> None:
-        """
-        Sets the environment.
-
-        :param env:
-        """
-        if self.env is not None:
-            raise ValueError("Trying to set env of already initialized environment.")
-
-        self.env = env
-
-    def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> DictReplayBufferSamples:
-        """
-        Abstract method from base class.
-        """
-        raise NotImplementedError()
 
     def sample(
         self,
@@ -225,26 +185,6 @@ class HerReplayBuffer(DictReplayBuffer):
         self.occluded_goal_frac.append(occluded_goal_fraction.item())
         return minibatch
 
-    def _sample_offline(
-        self,
-        n_sampled_goal: Optional[int] = None,
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], np.ndarray, np.ndarray]:
-        """
-        Sample function for offline sampling of HER transition,
-        in that case, only one episode is used and transitions
-        are added to the regular replay buffer.
-
-        :param n_sampled_goal: Number of sampled goals for replay
-        :return: at most(n_sampled_goal * episode_length) HER transitions.
-        """
-        # `maybe_vec_env=None` as we should store unnormalized transitions,
-        # they will be normalized at sampling time
-        return self._sample_transitions(
-            batch_size=None,
-            maybe_vec_env=None,
-            online_sampling=False,
-            n_sampled_goal=n_sampled_goal,
-        )
 
     def sample_goals(
         self,

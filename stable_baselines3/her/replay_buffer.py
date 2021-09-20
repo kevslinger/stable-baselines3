@@ -272,14 +272,10 @@ class ReplayBuffer(HerReplayBuffer):
                 # Now with the corrected episode length when using "future" strategy
                 transitions_indices = np.tile(np.arange(ep_lengths[0]), n_sampled_goal)
                 episode_indices = episode_indices[transitions_indices]
-                her_indices = np.arange(len(episode_indices))
 
         # get selected transitions
         transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
 
-        # sample new desired goals and relabel the transitions
-        #new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
-        #transitions["desired_goal"][her_indices] = new_goals
 
         # Convert info buffer to numpy array
         transitions["info"] = np.array(
@@ -288,25 +284,6 @@ class ReplayBuffer(HerReplayBuffer):
                 for episode_idx, transition_idx in zip(episode_indices, transitions_indices)
             ]
         )
-        #TODO:
-        her_indices = []
-        # Edge case: episode of one timesteps with the future strategy
-        # no virtual transition can be created
-        if len(her_indices) > 0:
-            # Vectorized computation of the new reward
-            transitions["reward"][her_indices, 0] = self.env.env_method(
-                "compute_reward",
-                # the new state depends on the previous state and action
-                # s_{t+1} = f(s_t, a_t)
-                # so the next_achieved_goal depends also on the previous state and action
-                # because we are in a GoalEnv:
-                # r_t = reward(s_t, a_t) = reward(next_achieved_goal, desired_goal)
-                # therefore we have to use "next_achieved_goal" and not "achieved_goal"
-                transitions["next_achieved_goal"][her_indices, 0],
-                # here we use the new desired goal
-                transitions["desired_goal"][her_indices, 0],
-                transitions["info"][her_indices, 0],
-            )
 
         # concatenate observation with (desired) goal
         observations = self._normalize_obs(transitions, maybe_vec_env)
@@ -335,154 +312,3 @@ class ReplayBuffer(HerReplayBuffer):
         else:
             return observations, next_observations, transitions["action"], transitions["reward"]
 
-    def add(
-        self,
-        obs: Dict[str, np.ndarray],
-        next_obs: Dict[str, np.ndarray],
-        action: np.ndarray,
-        reward: np.ndarray,
-        done: np.ndarray,
-        infos: List[Dict[str, Any]],
-    ) -> None:
-
-        if self.current_idx == 0 and self.full:
-            # Clear info buffer
-            self.info_buffer[self.pos] = deque(maxlen=self.max_episode_length)
-
-        # Remove termination signals due to timeout
-        if self.handle_timeout_termination:
-            done_ = done * (1 - np.array([info.get("TimeLimit.truncated", False) for info in infos]))
-        else:
-            done_ = done
-
-        self._buffer["observation"][self.pos][self.current_idx] = obs["observation"]
-        self._buffer["achieved_goal"][self.pos][self.current_idx] = obs["achieved_goal"]
-        self._buffer["desired_goal"][self.pos][self.current_idx] = obs["desired_goal"]
-        self._buffer["action"][self.pos][self.current_idx] = action
-        self._buffer["done"][self.pos][self.current_idx] = done_
-        self._buffer["reward"][self.pos][self.current_idx] = reward
-        self._buffer["next_obs"][self.pos][self.current_idx] = next_obs["observation"]
-        self._buffer["next_achieved_goal"][self.pos][self.current_idx] = next_obs["achieved_goal"]
-        self._buffer["next_desired_goal"][self.pos][self.current_idx] = next_obs["desired_goal"]
-
-        # When doing offline sampling
-        # Add real transition to normal replay buffer
-        if self.replay_buffer is not None:
-            self.replay_buffer.add(
-                obs,
-                next_obs,
-                action,
-                reward,
-                done,
-                infos,
-            )
-
-        self.info_buffer[self.pos].append(infos)
-
-        # update current pointer
-        self.current_idx += 1
-
-        self.episode_steps += 1
-
-        if done or self.episode_steps >= self.max_episode_length:
-            self.store_episode()
-            if not self.online_sampling:
-                # sample virtual transitions and store them in replay buffer
-                self._sample_her_transitions()
-                # clear storage for current episode
-                self.reset()
-
-            self.episode_steps = 0
-
-    def store_episode(self) -> None:
-        """
-        Increment episode counter
-        and reset transition pointer.
-        """
-        # add episode length to length storage
-        self.episode_lengths[self.pos] = self.current_idx
-
-        # update current episode pointer
-        # Note: in the OpenAI implementation
-        # when the buffer is full, the episode replaced
-        # is randomly chosen
-        self.pos += 1
-        if self.pos == self.max_episode_stored:
-            self.full = True
-            self.pos = 0
-        # reset transition pointer
-        self.current_idx = 0
-
-    def _sample_her_transitions(self) -> None:
-        """
-        Sample additional goals and store new transitions in replay buffer
-        when using offline sampling.
-        """
-
-        # Sample goals to create virtual transitions for the last episode.
-        observations, next_observations, actions, rewards = self._sample_offline(n_sampled_goal=self.n_sampled_goal)
-
-        # Store virtual transitions in the replay buffer, if available
-        if len(observations) > 0:
-            for i in range(len(observations["observation"])):
-                self.replay_buffer.add(
-                    {key: obs[i] for key, obs in observations.items()},
-                    {key: next_obs[i] for key, next_obs in next_observations.items()},
-                    actions[i],
-                    rewards[i],
-                    # We consider the transition as non-terminal
-                    done=[False],
-                    infos=[{}],
-                )
-
-    @property
-    def n_episodes_stored(self) -> int:
-        if self.full:
-            return self.max_episode_stored
-        return self.pos
-
-    def size(self) -> int:
-        """
-        :return: The current number of transitions in the buffer.
-        """
-        return int(np.sum(self.episode_lengths))
-
-    def reset(self) -> None:
-        """
-        Reset the buffer.
-        """
-        self.pos = 0
-        self.current_idx = 0
-        self.full = False
-        self.episode_lengths = np.zeros(self.max_episode_stored, dtype=np.int64)
-
-    def truncate_last_trajectory(self) -> None:
-        """
-        Only for online sampling, called when loading the replay buffer.
-        If called, we assume that the last trajectory in the replay buffer was finished
-        (and truncate it).
-        If not called, we assume that we continue the same trajectory (same episode).
-        """
-        # If we are at the start of an episode, no need to truncate
-        current_idx = self.current_idx
-
-        # truncate interrupted episode
-        if current_idx > 0:
-            warnings.warn(
-                "The last trajectory in the replay buffer will be truncated.\n"
-                "If you are in the same episode as when the replay buffer was saved,\n"
-                "you should use `truncate_last_trajectory=False` to avoid that issue."
-            )
-            # get current episode and transition index
-            pos = self.pos
-            # set episode length for current episode
-            self.episode_lengths[pos] = current_idx
-            # set done = True for current episode
-            # current_idx was already incremented
-            self._buffer["done"][pos][current_idx - 1] = np.array([True], dtype=np.float32)
-            # reset current transition index
-            self.current_idx = 0
-            # increment episode counter
-            self.pos = (self.pos + 1) % self.max_episode_stored
-            # update "full" indicator
-            self.full = self.full or self.pos == 0

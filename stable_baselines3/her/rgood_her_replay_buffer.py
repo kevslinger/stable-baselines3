@@ -7,7 +7,7 @@ import torch as th
 
 from stable_baselines3.common.buffers import DictReplayBuffer
 from stable_baselines3.common.preprocessing import get_obs_shape
-from stable_baselines3.common.type_aliases import DictReplayBufferSamples
+from stable_baselines3.common.type_aliases import DictReplayBufferSamples, ReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
@@ -60,7 +60,7 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         super(RecurrentGoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                   goal_selection_strategy, online_sampling, handle_timeout_termination)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 3) -> np.ndarray:
+    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
         """A good goal is defined as a goal that is not occluded.
         Arguments:
             her_indices: (numpy ndarray) The list of episodes which should be relabeled
@@ -243,7 +243,10 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
 
             normalized_obs = {key: self.to_torch(observations[key][:, 0, :]) for key in self._observation_keys}
 
-            return DictReplayBufferSamples(
+            normalized_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(normalized_obs['observation'], normalized_obs['achieved_goal'], normalized_obs['desired_goal']))
+            next_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(next_obs['observation'], next_obs['achieved_goal'], next_obs['desired_goal']))
+
+            return ReplayBufferSamples(
                 observations=normalized_obs,
                 actions=self.to_torch(transitions["action"]),
                 next_observations=next_obs,
@@ -251,4 +254,5 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
                 rewards=self.to_torch(self._normalize_reward(transitions["reward"], maybe_vec_env)),
             )
         else:
+            print("Oops I didn't realize we actually are not online sampling")
             return observations, next_observations, transitions["action"], transitions["reward"]
