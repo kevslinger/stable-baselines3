@@ -243,8 +243,9 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
 
             normalized_obs = {key: self.to_torch(observations[key][:, 0, :]) for key in self._observation_keys}
 
-            normalized_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(normalized_obs['observation'], normalized_obs['achieved_goal'], normalized_obs['desired_goal']))
-            next_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(next_obs['observation'], next_obs['achieved_goal'], next_obs['desired_goal']))
+            # TODO: Trying to make the observations more like without using HER
+            #normalized_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(normalized_obs['observation'], normalized_obs['achieved_goal'], normalized_obs['desired_goal']))
+            #next_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(next_obs['observation'], next_obs['achieved_goal'], next_obs['desired_goal']))
 
             return ReplayBufferSamples(
                 observations=normalized_obs,
