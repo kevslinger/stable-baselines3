@@ -1,15 +1,12 @@
-import warnings
-from collections import deque
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import DictReplayBuffer
-from stable_baselines3.common.preprocessing import get_obs_shape
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
-from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
+from stable_baselines3.her.goal_selection_strategy import GoalSelectionStrategy
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
 
@@ -72,12 +69,8 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         new_goals = []
         for idx, indices in enumerate(zip(her_indices, transition_indices)):
             her_index, transition_index = indices
-            #print(indices)
-            #print(her_index)
-            #print(transition_index)
+
             achieved_goal = self._buffer['achieved_goal'][her_index, transition_index][0]
-            #print(achieved_goal)
-            #print(len(achieved_goal))
             added_flag = False
             for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
                 sample_goal = achieved_goal[-goal_dim*ag_idx:][:goal_dim]
@@ -88,7 +81,6 @@ class GoodHerReplayBuffer(HerReplayBuffer):
             # If we haven't added to new goals, just keep the same desired goal
             if not added_flag:
                 new_goals.append([self._buffer['desired_goal'][her_index, transition_index][0][-goal_dim:]])
-                #print(new_goals)
 
         return np.array(new_goals)
 
@@ -127,7 +119,6 @@ class GoodHerReplayBuffer(HerReplayBuffer):
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
         return self.get_good_goals(her_episode_indices, transitions_indices)
-        #self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
 
     def _sample_transitions(
         self,

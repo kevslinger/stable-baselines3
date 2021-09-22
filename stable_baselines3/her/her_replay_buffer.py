@@ -1,47 +1,16 @@
-import warnings
-from collections import deque
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch as th
-import matplotlib.pyplot as plt
-from matplotlib.image import NonUniformImage
-import os
 
+from stable_baselines3.her.replay_buffer import ReplayBuffer
 from stable_baselines3.common.buffers import DictReplayBuffer
-from stable_baselines3.common.preprocessing import get_obs_shape
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
-from stable_baselines3.common.vec_env import VecEnv, VecNormalize, unwrap_vec_normalize
+from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
 
 
-def get_time_limit(env: VecEnv, current_max_episode_length: Optional[int]) -> int:
-    """
-    Get time limit from environment.
-
-    :param env: Environment from which we want to get the time limit.
-    :param current_max_episode_length: Current value for max_episode_length.
-    :return: max episode length
-    """
-    # try to get the attribute from environment
-    if current_max_episode_length is None:
-        try:
-            current_max_episode_length = env.get_attr("spec")[0].max_episode_steps
-            # Raise the error because the attribute is present but is None
-            if current_max_episode_length is None:
-                raise AttributeError
-        # if not available check if a valid value was passed as an argument
-        except AttributeError:
-            raise ValueError(
-                "The max episode length could not be inferred.\n"
-                "You must specify a `max_episode_steps` when registering the environment,\n"
-                "use a `gym.wrappers.TimeLimit` wrapper "
-                "or pass `max_episode_length` to the model constructor"
-            )
-    return current_max_episode_length
-
-
-class HerReplayBuffer(DictReplayBuffer):
+class HerReplayBuffer(ReplayBuffer):
     """
     Hindsight Experience Replay (HER) buffer.
     Paper: https://arxiv.org/abs/1707.01495
@@ -85,7 +54,8 @@ class HerReplayBuffer(DictReplayBuffer):
         handle_timeout_termination: bool = True,
     ):
 
-        super(HerReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
+        super(HerReplayBuffer, self).__init__(env, buffer_size, device, max_episode_length,
+                                              online_sampling, handle_timeout_termination)
 
         # convert goal_selection_strategy into GoalSelectionStrategy if string
         if isinstance(goal_selection_strategy, str):
@@ -99,92 +69,8 @@ class HerReplayBuffer(DictReplayBuffer):
         ), f"Invalid goal selection strategy, please use one of {list(GoalSelectionStrategy)}"
 
         self.n_sampled_goal = n_sampled_goal
-        # if we sample her transitions online use custom replay buffer
-        self.online_sampling = online_sampling
         # compute ratio between HER replays and regular replays in percent for online HER sampling
         self.her_ratio = 1 - (1.0 / (self.n_sampled_goal + 1))
-        # maximum steps in episode
-        self.max_episode_length = get_time_limit(env, max_episode_length)
-        # storage for transitions of current episode for offline sampling
-        # for online sampling, it replaces the "classic" replay buffer completely
-        her_buffer_size = buffer_size if online_sampling else self.max_episode_length
-
-        self.env = env
-        self._vec_normalize_env = unwrap_vec_normalize(env)
-        self.buffer_size = her_buffer_size
-
-        if online_sampling:
-            replay_buffer = None
-        self.replay_buffer = replay_buffer
-        self.online_sampling = online_sampling
-
-        # Handle timeouts termination properly if needed
-        # see https://github.com/DLR-RM/stable-baselines3/issues/284
-        self.handle_timeout_termination = handle_timeout_termination
-
-        # buffer with episodes
-        # number of episodes which can be stored until buffer size is reached
-        self.max_episode_stored = self.buffer_size // self.max_episode_length
-        self.current_idx = 0
-        # Counter to prevent overflow
-        self.episode_steps = 0
-
-        # Get shape of observation and goal (usually the same)
-        self.obs_shape = get_obs_shape(self.env.observation_space.spaces["observation"])
-        self.goal_shape = get_obs_shape(self.env.observation_space.spaces["achieved_goal"])
-
-        # input dimensions for buffer initialization
-        input_shape = {
-            "observation": (self.env.num_envs,) + self.obs_shape,
-            "achieved_goal": (self.env.num_envs,) + self.goal_shape,
-            "desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "action": (self.action_dim,),
-            "reward": (1,),
-            "next_obs": (self.env.num_envs,) + self.obs_shape,
-            "next_achieved_goal": (self.env.num_envs,) + self.goal_shape,
-            "next_desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "done": (1,),
-        }
-        self._observation_keys = ["observation", "achieved_goal", "desired_goal"]
-        self._buffer = {
-            key: np.zeros((self.max_episode_stored, self.max_episode_length, *dim), dtype=np.float32)
-            for key, dim in input_shape.items()
-        }
-        # Store info dicts are it can be used to compute the reward (e.g. continuity cost)
-        self.info_buffer = [deque(maxlen=self.max_episode_length) for _ in range(self.max_episode_stored)]
-        # episode length storage, needed for episodes which has less steps than the maximum length
-        self.episode_lengths = np.zeros(self.max_episode_stored, dtype=np.int64)
-
-        self.reward_frac = []
-        self.occluded_goal_frac = []
-
-        self.H_T = np.zeros((80, 50))
-
-
-    def sample(
-        self,
-        batch_size: int,
-        env: Optional[VecNormalize],
-    ) -> DictReplayBufferSamples:
-        """
-        Sample function for online sampling of HER transition,
-        this replaces the "regular" replay buffer ``sample()``
-        method in the ``train()`` function.
-
-        :param batch_size: Number of element to sample
-        :param env: Associated gym VecEnv
-            to normalize the observations/rewards when sampling
-        :return: Samples.
-        """
-        if self.replay_buffer is not None:
-            return self.replay_buffer.sample(batch_size, env)
-        minibatch =  self._sample_transitions(batch_size, maybe_vec_env=env, online_sampling=True)  # pytype: disable=bad-return-type
-        reward_fraction = 100 * (len(minibatch.rewards) - th.count_nonzero(minibatch.rewards)) / len(minibatch.rewards)
-        self.reward_frac.append(reward_fraction.item())
-        occluded_goal_fraction = 100 * (len(minibatch.observations['desired_goal']) - th.count_nonzero(th.count_nonzero(minibatch.observations['desired_goal'], axis=1))) / len(minibatch.observations['desired_goal'])
-        self.occluded_goal_frac.append(occluded_goal_fraction.item())
-        return minibatch
-
 
     def sample_goals(
         self,
@@ -346,189 +232,4 @@ class HerReplayBuffer(DictReplayBuffer):
         else:
             return observations, next_observations, transitions["action"], transitions["reward"]
 
-    def add(
-        self,
-        obs: Dict[str, np.ndarray],
-        next_obs: Dict[str, np.ndarray],
-        action: np.ndarray,
-        reward: np.ndarray,
-        done: np.ndarray,
-        infos: List[Dict[str, Any]],
-    ) -> None:
 
-        if self.current_idx == 0 and self.full:
-            # Clear info buffer
-            self.info_buffer[self.pos] = deque(maxlen=self.max_episode_length)
-
-        # Remove termination signals due to timeout
-        if self.handle_timeout_termination:
-            done_ = done * (1 - np.array([info.get("TimeLimit.truncated", False) for info in infos]))
-        else:
-            done_ = done
-
-        self._buffer["observation"][self.pos][self.current_idx] = obs["observation"]
-        self._buffer["achieved_goal"][self.pos][self.current_idx] = obs["achieved_goal"]
-        self._buffer["desired_goal"][self.pos][self.current_idx] = obs["desired_goal"]
-        self._buffer["action"][self.pos][self.current_idx] = action
-        self._buffer["done"][self.pos][self.current_idx] = done_
-        self._buffer["reward"][self.pos][self.current_idx] = reward
-        self._buffer["next_obs"][self.pos][self.current_idx] = next_obs["observation"]
-        self._buffer["next_achieved_goal"][self.pos][self.current_idx] = next_obs["achieved_goal"]
-        self._buffer["next_desired_goal"][self.pos][self.current_idx] = next_obs["desired_goal"]
-
-        # When doing offline sampling
-        # Add real transition to normal replay buffer
-        if self.replay_buffer is not None:
-            self.replay_buffer.add(
-                obs,
-                next_obs,
-                action,
-                reward,
-                done,
-                infos,
-            )
-
-        self.info_buffer[self.pos].append(infos)
-
-        # update current pointer
-        self.current_idx += 1
-
-        self.episode_steps += 1
-
-        if done or self.episode_steps >= self.max_episode_length:
-            self.store_episode()
-            if not self.online_sampling:
-                # sample virtual transitions and store them in replay buffer
-                self._sample_her_transitions()
-                # clear storage for current episode
-                self.reset()
-
-            self.episode_steps = 0
-
-    def store_episode(self) -> None:
-        """
-        Increment episode counter
-        and reset transition pointer.
-        """
-        # add episode length to length storage
-        self.episode_lengths[self.pos] = self.current_idx
-
-        # update current episode pointer
-        # Note: in the OpenAI implementation
-        # when the buffer is full, the episode replaced
-        # is randomly chosen
-        self.pos += 1
-        if self.pos == self.max_episode_stored:
-            self.full = True
-            self.pos = 0
-        # reset transition pointer
-        self.current_idx = 0
-
-    def _sample_her_transitions(self) -> None:
-        """
-        Sample additional goals and store new transitions in replay buffer
-        when using offline sampling.
-        """
-
-        # Sample goals to create virtual transitions for the last episode.
-        observations, next_observations, actions, rewards = self._sample_offline(n_sampled_goal=self.n_sampled_goal)
-
-        # Store virtual transitions in the replay buffer, if available
-        if len(observations) > 0:
-            for i in range(len(observations["observation"])):
-                self.replay_buffer.add(
-                    {key: obs[i] for key, obs in observations.items()},
-                    {key: next_obs[i] for key, next_obs in next_observations.items()},
-                    actions[i],
-                    rewards[i],
-                    # We consider the transition as non-terminal
-                    done=[False],
-                    infos=[{}],
-                )
-
-    @property
-    def n_episodes_stored(self) -> int:
-        if self.full:
-            return self.max_episode_stored
-        return self.pos
-
-    def size(self) -> int:
-        """
-        :return: The current number of transitions in the buffer.
-        """
-        return int(np.sum(self.episode_lengths))
-
-    def reset(self) -> None:
-        """
-        Reset the buffer.
-        """
-        self.pos = 0
-        self.current_idx = 0
-        self.full = False
-        self.episode_lengths = np.zeros(self.max_episode_stored, dtype=np.int64)
-
-    def truncate_last_trajectory(self) -> None:
-        """
-        Only for online sampling, called when loading the replay buffer.
-        If called, we assume that the last trajectory in the replay buffer was finished
-        (and truncate it).
-        If not called, we assume that we continue the same trajectory (same episode).
-        """
-        # If we are at the start of an episode, no need to truncate
-        current_idx = self.current_idx
-
-        # truncate interrupted episode
-        if current_idx > 0:
-            warnings.warn(
-                "The last trajectory in the replay buffer will be truncated.\n"
-                "If you are in the same episode as when the replay buffer was saved,\n"
-                "you should use `truncate_last_trajectory=False` to avoid that issue."
-            )
-            # get current episode and transition index
-            pos = self.pos
-            # set episode length for current episode
-            self.episode_lengths[pos] = current_idx
-            # set done = True for current episode
-            # current_idx was already incremented
-            self._buffer["done"][pos][current_idx - 1] = np.array([True], dtype=np.float32)
-            # reset current transition index
-            self.current_idx = 0
-            # increment episode counter
-            self.pos = (self.pos + 1) % self.max_episode_stored
-            # update "full" indicator
-            self.full = self.full or self.pos == 0
-
-    def get_heatmap(self, n_calls, bin_range=0.01, plot=False):
-        """Get a heatmap of the goals in the buffer"""
-        x_min, x_max = self.env.envs[0].x_left_limit, self.env.envs[0].x_right_limit
-        y_min, y_max = self.env.envs[0].y_down_limit, self.env.envs[0].y_up_limit
-        x_bins = np.arange(x_min, x_max + bin_range, bin_range)
-        y_bins = np.arange(y_min, y_max + bin_range, bin_range)
-
-        sample = self._sample_transitions(256, self._vec_normalize_env, online_sampling=True)
-
-        goals_x, goals_y = np.hsplit(sample.observations['desired_goal'][:, -2:], 2)
-        goals_x = goals_x.flatten().cpu().numpy()
-        goals_y = goals_y.flatten().cpu().numpy()
-        H, xedges, yedges = np.histogram2d(goals_x, goals_y, bins=(x_bins, y_bins))
-
-        self.H_T += H.T
-
-        if not os.path.exists(os.path.join(os.getcwd(), 'testHeatmap')):
-            os.mkdir(os.path.join(os.getcwd(), 'testHeatmap'))
-        np.save(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}.npy'), H.T)
-        np.save(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}_cumulative.npy'), self.H_T)
-
-
-        if plot:
-            xcenters = (xedges[:-1] + xedges[1:]) / 2
-            ycenters = (yedges[:-1] + yedges[1:]) / 2
-            fig, ax = plt.subplots()
-            plt.title(f'Heatmap of Goals, {type(self).__name__}, iteration {n_calls}')
-            plt.xlim([xedges[0], xedges[-1]])
-            plt.ylim([yedges[0], yedges[-1]])
-            im = NonUniformImage(ax, interpolation='bilinear')
-            im.set_data(xcenters, ycenters, self.H_T)
-            ax.images.append(im)
-            #im.colorbar()
-            plt.savefig(f'/home/kevin/Desktop/test/{type(self).__name__}_{n_calls}.png')

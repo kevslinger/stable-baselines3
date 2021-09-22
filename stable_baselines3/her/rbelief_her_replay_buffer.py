@@ -1,15 +1,12 @@
-import warnings
-from collections import deque
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import DictReplayBuffer
-from stable_baselines3.common.preprocessing import get_obs_shape
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
-from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
+from stable_baselines3.her.goal_selection_strategy import GoalSelectionStrategy
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
 
@@ -92,11 +89,8 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
 
         else:
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
-        #print("STOP")
-        #print(self.goal_shape[0]/self.env.envs[0].hist_len)
-        #print(self._buffer["achieved_goal"][her_episode_indices, transitions_indices][:, :, -int(self.goal_shape[0]/self.env.envs[0].hist_len):])
+
         return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices][:, :, -int(self.goal_shape[0]/self.env.envs[0].hist_len):], self.env.envs[0].hist_len)
-        #return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices], self.env.envs[0].hist_len)
 
     def _sample_transitions(
         self,
@@ -165,11 +159,6 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         # get selected transitions
         transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
 
-        # sample new desired goals and relabel the transitions
-        # new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
-        # TODO: remove
-        # transitions["desired_goal"][her_indices] = new_goals
-
         # Convert info buffer to numpy array
         transitions["info"] = np.array(
             [
@@ -177,10 +166,7 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
                 for episode_idx, transition_idx in zip(episode_indices, transitions_indices)
             ]
         )
-        # print(f"Desired goal")
-        # print(transitions['desired_goal'][her_indices])
-        # print("info")
-        # print(transitions['info'])
+
         her_episode_indices = episode_indices[her_indices]
         transitions_indices = np.random.randint(
             transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
