@@ -96,7 +96,6 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         self,
         batch_size: Optional[int],
         maybe_vec_env: Optional[VecNormalize],
-        online_sampling: bool,
         n_sampled_goal: Optional[int] = None,
     ) -> Union[DictReplayBufferSamples, Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], np.ndarray, np.ndarray]]:
         """
@@ -108,27 +107,16 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         :return: Samples.
         """
         # Select which episodes to use
-        if online_sampling:
-            assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
-            # Do not sample the episode with index `self.pos` as the episode is invalid
-            if self.full:
-                episode_indices = (
-                    np.random.randint(1, self.n_episodes_stored, batch_size) + self.pos
-                ) % self.n_episodes_stored
-            else:
-                episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
-            # A subset of the transitions will be relabeled using HER algorithm
-            her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
+        assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
+        # Do not sample the episode with index `self.pos` as the episode is invalid
+        if self.full:
+            episode_indices = (
+                np.random.randint(1, self.n_episodes_stored, batch_size) + self.pos
+            ) % self.n_episodes_stored
         else:
-            assert maybe_vec_env is None, "Transitions must be stored unnormalized in the replay buffer"
-            assert n_sampled_goal is not None, "No n_sampled_goal specified for offline sampling of HER transitions"
-            # Offline sampling: there is only one episode stored
-            episode_length = self.episode_lengths[0]
-            # we sample n_sampled_goal per timestep in the episode (only one is stored).
-            episode_indices = np.tile(0, (episode_length * n_sampled_goal))
-            # we only sample virtual transitions
-            # as real transitions are already stored in the replay buffer
-            her_indices = np.arange(len(episode_indices))
+            episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
+        # A subset of the transitions will be relabeled using HER algorithm
+        her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
 
         ep_lengths = self.episode_lengths[episode_indices]
 
@@ -140,21 +128,8 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
             her_indices = her_indices[ep_lengths[her_indices] > 1]
             ep_lengths[her_indices] -= 1
 
-        if online_sampling:
-            # Select which transitions to use
-            transitions_indices = np.random.randint(ep_lengths)
-        else:
-            if her_indices.size == 0:
-                # Episode of one timestep, not enough for using the "future" strategy
-                # no virtual transitions are created in that case
-                return {}, {}, np.zeros(0), np.zeros(0)
-            else:
-                # Repeat every transition index n_sampled_goals times
-                # to sample n_sampled_goal per timestep in the episode (only one is stored).
-                # Now with the corrected episode length when using "future" strategy
-                transitions_indices = np.tile(np.arange(ep_lengths[0]), n_sampled_goal)
-                episode_indices = episode_indices[transitions_indices]
-                her_indices = np.arange(len(episode_indices))
+        # Select which transitions to use
+        transitions_indices = np.random.randint(ep_lengths)
 
         # get selected transitions
         transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
@@ -207,17 +182,14 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         }
         next_observations = self._normalize_obs(next_observations, maybe_vec_env)
 
-        if online_sampling:
-            next_obs = {key: self.to_torch(next_observations[key][:, 0, :]) for key in self._observation_keys}
+        next_obs = {key: self.to_torch(next_observations[key][:, 0, :]) for key in self._observation_keys}
 
-            normalized_obs = {key: self.to_torch(observations[key][:, 0, :]) for key in self._observation_keys}
+        normalized_obs = {key: self.to_torch(observations[key][:, 0, :]) for key in self._observation_keys}
 
-            return DictReplayBufferSamples(
-                observations=normalized_obs,
-                actions=self.to_torch(transitions["action"]),
-                next_observations=next_obs,
-                dones=self.to_torch(transitions["done"]),
-                rewards=self.to_torch(self._normalize_reward(transitions["reward"], maybe_vec_env)),
-            )
-        else:
-            return observations, next_observations, transitions["action"], transitions["reward"]
+        return DictReplayBufferSamples(
+            observations=normalized_obs,
+            actions=self.to_torch(transitions["action"]),
+            next_observations=next_obs,
+            dones=self.to_torch(transitions["done"]),
+            rewards=self.to_torch(self._normalize_reward(transitions["reward"], maybe_vec_env)),
+        )
