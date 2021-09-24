@@ -54,6 +54,8 @@ class BaseBuffer(ABC):
         self.device = device
         self.n_envs = n_envs
 
+        self.reward_frac = []
+
     @staticmethod
     def swap_and_flatten(arr: np.ndarray) -> np.ndarray:
         """
@@ -221,7 +223,7 @@ class ReplayBuffer(BaseBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-        self.reward_frac = []
+
 
     def add(
         self,

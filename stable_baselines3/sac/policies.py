@@ -296,6 +296,10 @@ class SACPolicy(BasePolicy):
 
         self._build(lr_schedule)
 
+        print(self.actor)
+        print(self.critic)
+        #exit(0)
+
     def _build(self, lr_schedule: Schedule) -> None:
         self.actor = self.make_actor()
         self.actor.optimizer = self.optimizer_class(self.actor.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
