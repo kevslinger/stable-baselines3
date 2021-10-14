@@ -163,8 +163,9 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
 
         # sample new desired goals and relabel the transitions
-        new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
-        transitions["desired_goal"][her_indices] = new_goals
+        if self.n_sampled_goal > 0:
+            new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
+            transitions["desired_goal"][her_indices] = new_goals
 
         # Convert info buffer to numpy array
         transitions["info"] = np.array(

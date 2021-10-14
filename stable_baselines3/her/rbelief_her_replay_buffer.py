@@ -56,42 +56,6 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         super(RecurrentBeliefHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                              goal_selection_strategy, online_sampling, handle_timeout_termination)
 
-    def sample_goals(
-        self,
-        episode_indices: np.ndarray,
-        her_indices: np.ndarray,
-        transitions_indices: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Sample goals based on goal_selection_strategy.
-        This is a vectorized (fast) version.
-
-        :param episode_indices: Episode indices to use.
-        :param her_indices: HER indices.
-        :param transitions_indices: Transition indices to use.
-        :return: Return sampled goals.
-        """
-        her_episode_indices = episode_indices[her_indices]
-
-        if self.goal_selection_strategy == GoalSelectionStrategy.FINAL:
-            # replay with final state of current episode
-            transitions_indices = self.episode_lengths[her_episode_indices] - 1
-
-        elif self.goal_selection_strategy == GoalSelectionStrategy.FUTURE:
-            # replay with random state which comes from the same episode and was observed after current transition
-            transitions_indices = np.random.randint(
-                transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
-            )
-
-        elif self.goal_selection_strategy == GoalSelectionStrategy.EPISODE:
-            # replay with random state which comes from the same episode as current transition
-            transitions_indices = np.random.randint(self.episode_lengths[her_episode_indices])
-
-        else:
-            raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
-
-        return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices][:, :, -int(self.goal_shape[0]/self.env.envs[0].hist_len):], self.env.envs[0].hist_len)
-
     def _sample_transitions(
         self,
         batch_size: Optional[int],
@@ -142,15 +106,18 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
             ]
         )
 
-        her_episode_indices = episode_indices[her_indices]
-        transitions_indices = np.random.randint(
-            transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
-        )
-        transitions['desired_goal'][her_indices] = np.tile(np.array([[info[0]['state']] for info in \
-                                                                     np.array([
-                                                                         self.info_buffer[episode_idx][transition_idx]
-                                                                         for episode_idx, transition_idx in zip(her_episode_indices, transitions_indices)
-                                                                     ])]), self.env.envs[0].hist_len)
+        # We can set n_sampled_goal to 0 in which case we don't want to do this relabeling.
+        if self.n_sampled_goal > 0:
+            her_episode_indices = episode_indices[her_indices]
+            # Permanently using the "future" strategy
+            her_transitions_indices = np.random.randint(
+                transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
+            )
+            transitions['desired_goal'][her_indices] = np.tile(np.array([[info[0]['state']] for info in \
+                                                                         np.array([
+                                                                             self.info_buffer[episode_idx][transition_idx-1]
+                                                                             for episode_idx, transition_idx in zip(her_episode_indices, her_transitions_indices)
+                                                                         ])]), self.env.envs[0].hist_len)
 
         # Edge case: episode of one timesteps with the future strategy
         # no virtual transition can be created
