@@ -112,14 +112,12 @@ class HerReplayBuffer(ReplayBuffer):
         self,
         batch_size: Optional[int],
         maybe_vec_env: Optional[VecNormalize],
-        n_sampled_goal: Optional[int] = None,
     ) -> Union[DictReplayBufferSamples, Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], np.ndarray, np.ndarray]]:
         """
         :param batch_size: Number of element to sample (only used for online sampling)
         :param env: associated gym VecEnv to normalize the observations/rewards
             Only valid when using online sampling
         :param online_sampling: Using online_sampling for HER or not.
-        :param n_sampled_goal: Number of sampled goals for replay. (offline sampling)
         :return: Samples.
         """
         # Select which episodes to use

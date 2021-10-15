@@ -121,7 +121,7 @@ class BeliefHerReplayBuffer(HerReplayBuffer):
 
             transitions['desired_goal'][her_indices] = np.array([[info[0]['state']] for info in \
                                                                  np.array([
-                                                                     self.info_buffer[episode_idx][transition_idx]
+                                                                     self.info_buffer[episode_idx][transition_idx-1]
                                                                      for episode_idx, transition_idx in zip(her_episode_indices, her_transitions_indices)
                                                                  ])])
 

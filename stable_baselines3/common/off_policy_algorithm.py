@@ -193,6 +193,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                 self.env,
                 self.buffer_size,
                 self.device,
+                **self.replay_buffer_kwargs
             )
 
         elif issubclass(self.replay_buffer_class, HerReplayBuffer):
