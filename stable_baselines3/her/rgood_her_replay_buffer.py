@@ -57,7 +57,7 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         super(RecurrentGoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                   goal_selection_strategy, online_sampling, handle_timeout_termination)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
+    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 3) -> np.ndarray:
         """A good goal is defined as a goal that is not occluded.
         Arguments:
             her_indices: (numpy ndarray) The list of episodes which should be relabeled
@@ -212,6 +212,20 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         # TODO: Trying to make the observations more like without using HER
         #normalized_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(normalized_obs['observation'], normalized_obs['achieved_goal'], normalized_obs['desired_goal']))
         #next_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(next_obs['observation'], next_obs['achieved_goal'], next_obs['desired_goal']))
+
+        #print(f"Observations: {observations}")
+        #print(f"next_obs: {next_obs}")
+        #print(f"infos: {transitions['info']}")
+        #print(f"Rewards: {self._normalize_reward(transitions['reward'], maybe_vec_env)}")
+        # ags = next_obs['achieved_goal'][:len(her_indices)]
+        # dgs = next_obs['desired_goal'][:len(her_indices)]
+        # for ag, dg in zip(ags, dgs):
+        #     ag = ag.cpu()[:3]
+        #     dg = dg.cpu()[:3]
+        #     dist = np.linalg.norm(ag - dg, axis=-1)
+        #     reward = 0 if dist < 0.05 else -1
+        #     print(f"AG: {ag} DG: {dg}, DIST: {dist}, R: {reward}")
+        # print()
 
         return DictReplayBufferSamples(
             observations=normalized_obs,
