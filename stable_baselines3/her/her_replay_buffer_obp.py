@@ -157,9 +157,8 @@ class OcclusionPrioritizedHerReplayBuffer(HerReplayBuffer):
         #     episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
         episode_indices = (
             np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
-                             p=np.concatenate([(1+occlusions) / (self.n_episodes_stored + sum(self._buffer['occlusions'][:self.n_episodes_stored])) for occlusions in
-                                self._buffer['occlusions'][:self.n_episodes_stored]], axis=-1)[0])
-        )
+                             p=((1 + self._buffer['occlusions'][:self.n_episodes_stored]) / (self.n_episodes_stored + sum(self._buffer['occlusions'][:self.n_episodes_stored]))).flatten())
+            )
         # A subset of the transitions will be relabeled using HER algorithm
         her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
 
