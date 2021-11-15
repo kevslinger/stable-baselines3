@@ -1,16 +1,17 @@
-from typing import Dict, Optional, Tuple, Union
+from collections import deque
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import DictReplayBuffer
-from stable_baselines3.common.type_aliases import DictReplayBufferSamples, ReplayBufferSamples
+from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 from stable_baselines3.her.goal_selection_strategy import GoalSelectionStrategy
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
 
-class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
+class RecurrentOcclusionPrioritizedHerReplayBuffer(HerReplayBuffer):
     """
     Hindsight Experience Replay (HER) buffer.
     Paper: https://arxiv.org/abs/1707.01495
@@ -52,37 +53,71 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         goal_selection_strategy: Union[GoalSelectionStrategy, str] = "future",
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
+        prioritize_occlusions: bool = True
     ):
 
-        super(RecurrentGoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length,
-                                                           n_sampled_goal, goal_selection_strategy, online_sampling,
-                                                           handle_timeout_termination)
+        super(RecurrentOcclusionPrioritizedHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
+                                                             goal_selection_strategy, online_sampling, handle_timeout_termination)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 3) -> np.ndarray:
-        """A good goal is defined as a goal that is not occluded.
-        Arguments:
-            her_indices: (numpy ndarray) The list of episodes which should be relabeled
-            transition_indices: (numpy ndarray) The list of transition indices which should be relabeled
-            goal_dim: (int) The dimensionality of the environment's goal
-        Returns:
-            new_goals: (numpy ndarray) the newly relabeled goals from `her_indices` epidoes and `transition_indices`
-            """
-        new_goals = []
-        for idx, indices in enumerate(zip(her_indices, transition_indices)):
-            her_index, transition_index = indices
-            achieved_goal = self._buffer['achieved_goal'][her_index, transition_index][0]
-            added_flag = False
-            for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
-                sample_goal = achieved_goal[-goal_dim*ag_idx:][:goal_dim]
-                if not np.array_equal(sample_goal, np.zeros(goal_dim)):
-                    new_goals.append([sample_goal])
-                    added_flag = True
-                    break
-            # If we haven't added to new goals, just keep the same desired goal
-            if not added_flag:
-                new_goals.append([self._buffer['desired_goal'][her_index, transition_index][0][-goal_dim:]])
+        self._buffer['occlusions'] = np.zeros((self.max_episode_stored, 1, 1), dtype=np.float32)
+        self.prioritize_occlusions = prioritize_occlusions
 
-        return np.array(new_goals)
+    def add(
+        self,
+        obs: Dict[str, np.ndarray],
+        next_obs: Dict[str, np.ndarray],
+        action: np.ndarray,
+        reward: np.ndarray,
+        done: np.ndarray,
+        infos: List[Dict[str, Any]],
+    ) -> None:
+
+        if self.current_idx == 0 and self.full:
+            # Clear info buffer
+            self.info_buffer[self.pos] = deque(maxlen=self.max_episode_length)
+
+        # Remove termination signals due to timeout
+        if self.handle_timeout_termination:
+            done_ = done * (1 - np.array([info.get("TimeLimit.truncated", False) for info in infos]))
+        else:
+            done_ = done
+
+        self._buffer["observation"][self.pos][self.current_idx] = obs["observation"]
+        self._buffer["achieved_goal"][self.pos][self.current_idx] = obs["achieved_goal"]
+        self._buffer["desired_goal"][self.pos][self.current_idx] = obs["desired_goal"]
+        self._buffer["action"][self.pos][self.current_idx] = action
+        self._buffer["done"][self.pos][self.current_idx] = done_
+        self._buffer["reward"][self.pos][self.current_idx] = reward
+        self._buffer["next_obs"][self.pos][self.current_idx] = next_obs["observation"]
+        self._buffer["next_achieved_goal"][self.pos][self.current_idx] = next_obs["achieved_goal"]
+        self._buffer["next_desired_goal"][self.pos][self.current_idx] = next_obs["desired_goal"]
+        if self.prioritize_occlusions:
+            self._buffer["occlusions"][self.pos] += np.count_nonzero(obs['achieved_goal'] == 0.0)
+        else:
+            self._buffer["occlusions"][self.pos] += np.count_nonzero(obs['achieved_goal'])
+
+        # When doing offline sampling
+        # Add real transition to normal replay buffer
+        if self.replay_buffer is not None:
+            self.replay_buffer.add(
+                obs,
+                next_obs,
+                action,
+                reward,
+                done,
+                infos,
+            )
+
+        self.info_buffer[self.pos].append(infos)
+
+        # update current pointer
+        self.current_idx += 1
+
+        self.episode_steps += 1
+
+        if done or self.episode_steps >= self.max_episode_length:
+            self.store_episode()
+            self.episode_steps = 0
 
     def sample_goals(
         self,
@@ -118,8 +153,8 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         else:
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
-        return np.tile(self.get_good_goals(her_episode_indices, transitions_indices), self.env.envs[0].hist_len)
-        #self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
+        return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices][:, :, -int(self.goal_shape[0]/self.env.envs[0].hist_len):], self.env.envs[0].hist_len)
+        #return np.tile(self._buffer["achieved_goal"][her_episode_indices, transitions_indices], self.env.envs[0].hist_len)
 
     def _sample_transitions(
         self,
@@ -138,12 +173,17 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         # Select which episodes to use
         assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
         # Do not sample the episode with index `self.pos` as the episode is invalid
-        if self.full:
-            episode_indices = (
-                np.random.randint(1, self.n_episodes_stored, batch_size) + self.pos
-            ) % self.n_episodes_stored
-        else:
-            episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
+        # if self.full:
+        #     episode_indices = (
+        #         np.random.randint(1, self.n_episodes_stored, batch_size) + self.pos
+        #     ) % self.n_episodes_stored
+        # else:
+        #     episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
+        episode_indices = (
+            np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
+                             p=np.concatenate([(1+occlusions) / (self.n_episodes_stored + sum(self._buffer['occlusions'][:self.n_episodes_stored])) for occlusions in
+                                               self._buffer['occlusions'][:self.n_episodes_stored]], axis=-1)[0])
+        )
         # A subset of the transitions will be relabeled using HER algorithm
         her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
 
@@ -161,12 +201,11 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         transitions_indices = np.random.randint(ep_lengths)
 
         # get selected transitions
-        transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
+        transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys() if not key == "occlusions"}
 
         # sample new desired goals and relabel the transitions
-        if self.n_sampled_goal > 0:
-            new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
-            transitions["desired_goal"][her_indices] = new_goals
+        new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
+        transitions["desired_goal"][her_indices] = new_goals
 
         # Convert info buffer to numpy array
         transitions["info"] = np.array(
@@ -209,24 +248,6 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         next_obs = {key: self.to_torch(next_observations[key][:, 0, :]) for key in self._observation_keys}
 
         normalized_obs = {key: self.to_torch(observations[key][:, 0, :]) for key in self._observation_keys}
-
-        # TODO: Trying to make the observations more like without using HER
-        #normalized_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(normalized_obs['observation'], normalized_obs['achieved_goal'], normalized_obs['desired_goal']))
-        #next_obs = np.array([np.array([*o, *ag, *dg])] for o, ag, dg in zip(next_obs['observation'], next_obs['achieved_goal'], next_obs['desired_goal']))
-
-        #print(f"Observations: {observations}")
-        #print(f"next_obs: {next_obs}")
-        #print(f"infos: {transitions['info']}")
-        #print(f"Rewards: {self._normalize_reward(transitions['reward'], maybe_vec_env)}")
-        # ags = next_obs['achieved_goal'][:len(her_indices)]
-        # dgs = next_obs['desired_goal'][:len(her_indices)]
-        # for ag, dg in zip(ags, dgs):
-        #     ag = ag.cpu()[:3]
-        #     dg = dg.cpu()[:3]
-        #     dist = np.linalg.norm(ag - dg, axis=-1)
-        #     reward = 0 if dist < 0.05 else -1
-        #     print(f"AG: {ag} DG: {dg}, DIST: {dist}, R: {reward}")
-        # print()
 
         return DictReplayBufferSamples(
             observations=normalized_obs,
