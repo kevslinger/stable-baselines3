@@ -112,7 +112,7 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
         """
         # Select which episodes to use
         assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
-        if self.prioritze_occlusions == 0:
+        if self.prioritize_occlusions == 0:
             # Do not sample the episode with index `self.pos` as the episode is invalid
             if self.full:
                 episode_indices = (

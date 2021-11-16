@@ -143,7 +143,7 @@ class ReplayBuffer(DictReplayBuffer):
 
         # OCCLUSION-BASED PRIORITY
         self._buffer["occlusions"] = np.zeros((self.max_episode_stored, 1, 1), dtype=np.float32)
-        self.prioritze_occlusions = prioritize_occlusions
+        self.prioritize_occlusions = prioritize_occlusions
 
     def sample(
         self,
@@ -182,7 +182,7 @@ class ReplayBuffer(DictReplayBuffer):
         """
         # Select which episodes to use
         assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
-        if self.prioritze_occlusions == 0:
+        if self.prioritize_occlusions == 0:
             # Do not sample the episode with index `self.pos` as the episode is invalid
             if self.full:
                 episode_indices = (
@@ -268,7 +268,7 @@ class ReplayBuffer(DictReplayBuffer):
         self._buffer["next_desired_goal"][self.pos][self.current_idx] = next_obs["desired_goal"]
         if self.prioritize_occlusions == 1:  # Occlusion based priority
             self._buffer["occlusions"][self.pos] += np.count_nonzero(obs['achieved_goal'] == 0.0)
-        elif self.prioritze_occlusions == -1:  # NON-Occlusion based priority
+        elif self.prioritize_occlusions == -1:  # NON-Occlusion based priority
             self._buffer["occlusions"][self.pos] += np.count_nonzero(obs['achieved_goal'])
 
         # When doing offline sampling
