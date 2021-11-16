@@ -176,7 +176,7 @@ class OcclusionPrioritizedHerReplayBuffer(HerReplayBuffer):
         transitions_indices = np.random.randint(ep_lengths)
 
         # get selected transitions
-        transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys() if not key == "occlusions"}
+        transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys() if key != "occlusions"}
 
         # sample new desired goals and relabel the transitions
         new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)

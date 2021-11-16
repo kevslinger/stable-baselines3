@@ -52,10 +52,12 @@ class HerReplayBuffer(ReplayBuffer):
         goal_selection_strategy: Union[GoalSelectionStrategy, str] = "future",
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
+        prioritize_occlusions: int = 0 # -1 is False, 0 is none, 1 is True
     ):
 
         super(HerReplayBuffer, self).__init__(env, buffer_size, device, max_episode_length,
-                                              online_sampling, handle_timeout_termination)
+                                              online_sampling, handle_timeout_termination,
+                                              prioritize_occlusions)
 
         # convert goal_selection_strategy into GoalSelectionStrategy if string
         if isinstance(goal_selection_strategy, str):
@@ -123,12 +125,19 @@ class HerReplayBuffer(ReplayBuffer):
         # Select which episodes to use
         assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
         # Do not sample the episode with index `self.pos` as the episode is invalid
-        if self.full:
-            episode_indices = (
-                np.random.randint(1, self.n_episodes_stored, batch_size) + self.pos
-            ) % self.n_episodes_stored
+        if self.prioritze_occlusions == 0:
+            # Do not sample the episode with index `self.pos` as the episode is invalid
+            if self.full:
+                episode_indices = (
+                    np.random.randint(1, self.n_episodes_stored, batch_size) + self.pos
+                ) % self.n_episodes_stored
+            else:
+                episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
         else:
-            episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
+            episode_indices = np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
+                                               p=((1 + self._buffer['occlusions'][:self.n_episodes_stored]) / (
+                                                       self.n_episodes_stored + sum(
+                                                   self._buffer['occlusions'][:self.n_episodes_stored]))).flatten())
         # A subset of the transitions will be relabeled using HER algorithm
         her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
 
@@ -146,7 +155,7 @@ class HerReplayBuffer(ReplayBuffer):
         transitions_indices = np.random.randint(ep_lengths)
 
         # get selected transitions
-        transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys()}
+        transitions = {key: self._buffer[key][episode_indices, transitions_indices].copy() for key in self._buffer.keys() if key != "occlusions"}
 
         # sample new desired goals and relabel the transitions
         new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
