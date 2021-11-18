@@ -12,6 +12,7 @@ from stable_baselines3.common.buffers import DictReplayBuffer
 from stable_baselines3.common.preprocessing import get_obs_shape
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize, unwrap_vec_normalize
+from scipy.special import softmax
 
 
 def get_time_limit(env: VecEnv, current_max_episode_length: Optional[int]) -> int:
@@ -192,8 +193,7 @@ class ReplayBuffer(DictReplayBuffer):
                 episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
         else:
             episode_indices = np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
-                                               p=((1 + self._buffer['occlusions'][:self.n_episodes_stored]) / (
-                                                self.n_episodes_stored + sum(self._buffer['occlusions'][:self.n_episodes_stored]))).flatten())
+                                               p=softmax(self._buffer["occlusions"][:self.n_episodes_stored]).flatten())
 
         ep_lengths = self.episode_lengths[episode_indices]
 

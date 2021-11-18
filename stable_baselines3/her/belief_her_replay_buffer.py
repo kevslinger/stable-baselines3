@@ -8,7 +8,7 @@ from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 from stable_baselines3.her.goal_selection_strategy import GoalSelectionStrategy
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
-
+from scipy.special import softmax
 
 class BeliefHerReplayBuffer(HerReplayBuffer):
     """
@@ -86,9 +86,7 @@ class BeliefHerReplayBuffer(HerReplayBuffer):
                 episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
         else:
             episode_indices = np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
-                                               p=((1 + self._buffer['occlusions'][:self.n_episodes_stored]) / (
-                                                       self.n_episodes_stored + sum(
-                                                   self._buffer['occlusions'][:self.n_episodes_stored]))).flatten())
+                                               p=softmax(self._buffer["occlusions"][:self.n_episodes_stored]).flatten())
         # A subset of the transitions will be relabeled using HER algorithm
         her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
 
