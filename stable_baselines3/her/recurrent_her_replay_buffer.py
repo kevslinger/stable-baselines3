@@ -90,6 +90,31 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
             # replay with random state which comes from the same episode as current transition
             transitions_indices = np.random.randint(self.episode_lengths[her_episode_indices])
 
+        elif self.goal_selection_strategy == GoalSelectionStrategy.OCCLUDED:
+            # I want to take the trajectory and prioritize those transitions which are occluded.
+            # This is no longer a vectorized (fast) version
+            goals_to_assign = []
+            for i, her_ep_idx in enumerate(her_episode_indices):
+                potential_goals = self._buffer["achieved_goal"][her_ep_idx, transitions_indices[her_indices[i]] + 1:].squeeze()
+                if len(potential_goals) == 3 * self.env.envs[0].hist_len and softmax(np.count_nonzero(potential_goals == 0.0, axis=-1)).flatten()[0] == 1:
+                    goals_to_assign.append(potential_goals)
+                else:
+                    #print(potential_goals)
+                    goals_to_assign.append(potential_goals[np.random.choice(range(len(potential_goals)), p=softmax(np.count_nonzero(potential_goals == 0.0, axis=-1)).flatten())])
+            return np.expand_dims(np.array(goals_to_assign), axis=1)
+
+        elif self.goal_selection_strategy == GoalSelectionStrategy.UNOCCLUDED:
+            goals_to_assign = []
+            for i, her_ep_idx in enumerate(her_episode_indices):
+                potential_goals = self._buffer["achieved_goal"][her_ep_idx,
+                                  transitions_indices[her_indices[i]] + 1:].squeeze()
+                if len(potential_goals) == 3 * self.env.envs[0].hist_len and softmax(np.count_nonzero(potential_goals, axis=-1)).flatten()[0] == 1:
+                    goals_to_assign.append(potential_goals)
+                else:
+                    goals_to_assign.append(potential_goals[np.random.choice(range(len(potential_goals)), p=softmax(
+                        np.count_nonzero(potential_goals, axis=-1)).flatten())])
+            return np.expand_dims(np.array(goals_to_assign), axis=1)
+
         else:
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
@@ -130,7 +155,9 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
 
         # Special case when using the "future" goal sampling strategy
         # we cannot sample all transitions, we have to remove the last timestep
-        if self.goal_selection_strategy == GoalSelectionStrategy.FUTURE:
+        if self.goal_selection_strategy == GoalSelectionStrategy.FUTURE or \
+                self.goal_selection_strategy == GoalSelectionStrategy.UNOCCLUDED or \
+                self.goal_selection_strategy == GoalSelectionStrategy.OCCLUDED:
             # restrict the sampling domain when ep_lengths > 1
             # otherwise filter out the indices
             her_indices = her_indices[ep_lengths[her_indices] > 1]

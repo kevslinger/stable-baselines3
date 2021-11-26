@@ -15,6 +15,10 @@ class GoalSelectionStrategy(Enum):
     FINAL = 1
     # Select a goal that was achieved in the episode
     EPISODE = 2
+    # Prioritize Goals that are noisy
+    OCCLUDED = 3
+    # Prioritize Goals that are not noisy
+    UNOCCLUDED = 4
 
 
 # For convenience
@@ -23,4 +27,6 @@ KEY_TO_GOAL_STRATEGY = {
     "future": GoalSelectionStrategy.FUTURE,
     "final": GoalSelectionStrategy.FINAL,
     "episode": GoalSelectionStrategy.EPISODE,
+    "occluded": GoalSelectionStrategy.OCCLUDED,
+    "unoccluded": GoalSelectionStrategy.UNOCCLUDED,
 }

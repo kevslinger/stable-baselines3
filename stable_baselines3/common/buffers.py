@@ -223,8 +223,6 @@ class ReplayBuffer(BaseBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-
-
     def add(
         self,
         obs: np.ndarray,
@@ -267,7 +265,10 @@ class ReplayBuffer(BaseBuffer):
         :return:
         """
         if not self.optimize_memory_usage:
-            return super().sample(batch_size=batch_size, env=env)
+            minibatch = super().sample(batch_size=batch_size, env=env)
+            reward_fraction = (len(minibatch.rewards) - th.count_nonzero(minibatch.rewards)) / len(minibatch.rewards)
+            self.reward_frac.append(reward_fraction)
+            return minibatch
         # Do not sample the element with index `self.pos` as the transitions is invalid
         # (we use only one array to store `obs` and `next_obs`)
         if self.full:
