@@ -146,8 +146,12 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
             else:
                 episode_indices = np.random.randint(0, self.n_episodes_stored, batch_size)
         else:
+            # episode_indices = np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
+            #                                    p=softmax(self._buffer["occlusions"][:self.n_episodes_stored]).flatten())
             episode_indices = np.random.choice(range(self.n_episodes_stored), size=batch_size, replace=True,
-                                               p=softmax(self._buffer["occlusions"][:self.n_episodes_stored]).flatten())
+                                               p=((1 + self._buffer['occlusions'][:self.n_episodes_stored]) / (
+                                                       self.n_episodes_stored + sum(
+                                                   self._buffer['occlusions'][:self.n_episodes_stored]))).flatten())
         # A subset of the transitions will be relabeled using HER algorithm
         her_indices = np.arange(batch_size)[: int(self.her_ratio * batch_size)]
 
