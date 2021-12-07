@@ -53,12 +53,13 @@ class HerReplayBuffer(ReplayBuffer):
         goal_selection_strategy: Union[GoalSelectionStrategy, str] = "future",
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
-        prioritize_occlusions: int = 0 # -1 is False, 0 is none, 1 is True
+        prioritize_occlusions: int = 0,  # -1 is False, 0 is None, 1 is True,
+        run_name: str = ""
     ):
 
         super(HerReplayBuffer, self).__init__(env, buffer_size, device, max_episode_length,
                                               online_sampling, handle_timeout_termination,
-                                              prioritize_occlusions)
+                                              prioritize_occlusions, run_name)
 
         # convert goal_selection_strategy into GoalSelectionStrategy if string
         if isinstance(goal_selection_strategy, str):

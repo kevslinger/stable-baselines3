@@ -52,14 +52,15 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         goal_selection_strategy: Union[GoalSelectionStrategy, str] = "future",
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
-        prioritize_occlusions: int = 0  # -1 is False, 0 is None, 1 is True
+        prioritize_occlusions: int = 0,  # -1 is False, 0 is None, 1 is True,
+        run_name: str = ""
     ):
 
         super(RecurrentGoodHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length,
                                                            n_sampled_goal, goal_selection_strategy, online_sampling,
-                                                           handle_timeout_termination, prioritize_occlusions)
+                                                           handle_timeout_termination, prioritize_occlusions, run_name)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 3) -> np.ndarray:
+    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
         """A good goal is defined as a goal that is not occluded.
         Arguments:
             her_indices: (numpy ndarray) The list of episodes which should be relabeled

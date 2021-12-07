@@ -80,7 +80,8 @@ class ReplayBuffer(DictReplayBuffer):
         max_episode_length: Optional[int] = None,
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
-        prioritize_occlusions: int = 0 # -1 is False, 0 is None, 1 is True
+        prioritize_occlusions: int = 0, # -1 is False, 0 is None, 1 is True,
+        run_name: str= ""
     ):
 
         super(ReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
@@ -140,7 +141,8 @@ class ReplayBuffer(DictReplayBuffer):
 
         self.occluded_goal_frac = []
 
-        self.H_T = np.zeros((80, 50))
+        self.H_T = np.zeros((100, 100))
+        self.run_name = run_name
 
         # OCCLUSION-BASED PRIORITY
         self._buffer["occlusions"] = np.zeros((self.max_episode_stored, 1, 1), dtype=np.float32)
@@ -369,10 +371,12 @@ class ReplayBuffer(DictReplayBuffer):
             # update "full" indicator
             self.full = self.full or self.pos == 0
 
-    def get_heatmap(self, n_calls, bin_range=0.01, plot=False):
+    def get_heatmap(self, n_calls, bin_range=0.1, plot=False):
         """Get a heatmap of the goals in the buffer"""
-        x_min, x_max = self.env.envs[0].x_left_limit, self.env.envs[0].x_right_limit
-        y_min, y_max = self.env.envs[0].y_down_limit, self.env.envs[0].y_up_limit
+        #x_min, x_max = self.env.envs[0].x_left_limit, self.env.envs[0].x_right_limit
+        #y_min, y_max = self.env.envs[0].y_down_limit, self.env.envs[0].y_up_limit
+        x_min, x_max = self.env.envs[0].min_x, self.env.envs[0].max_x
+        y_min, y_max = self.env.envs[0].min_y, self.env.envs[0].max_y
         x_bins = np.arange(x_min, x_max + bin_range, bin_range)
         y_bins = np.arange(y_min, y_max + bin_range, bin_range)
 
@@ -385,20 +389,23 @@ class ReplayBuffer(DictReplayBuffer):
 
         self.H_T += H.T
 
-        if not os.path.exists(os.path.join(os.getcwd(), 'testHeatmap')):
-            os.mkdir(os.path.join(os.getcwd(), 'testHeatmap'))
-        np.save(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}.npy'), H.T)
-        np.save(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}_cumulative.npy'), self.H_T)
+        heatmap_dir = 'testHeatmap'
+        if not os.path.exists(os.path.join(os.getcwd(), heatmap_dir)):
+            os.mkdir(os.path.join(os.getcwd(), heatmap_dir))
+        if not os.path.exists(os.path.join(os.getcwd(), heatmap_dir, self.run_name)):
+            os.mkdir(os.path.join(os.getcwd(), heatmap_dir, self.run_name))
+        np.save(os.path.join(os.getcwd(), heatmap_dir, self.run_name, f'{n_calls}.npy'), H.T)
+        np.save(os.path.join(os.getcwd(), heatmap_dir, self.run_name, f'{n_calls}_cumulative.npy'), self.H_T)
 
 
         if plot:
             xcenters = (xedges[:-1] + xedges[1:]) / 2
             ycenters = (yedges[:-1] + yedges[1:]) / 2
             fig, ax = plt.subplots()
-            plt.title(f'Heatmap of Goals, {type(self).__name__}, iteration {n_calls}')
+            plt.title(f'Heatmap of Goals, {self.run_name}, iteration {n_calls}')
             plt.xlim([xedges[0], xedges[-1]])
             plt.ylim([yedges[0], yedges[-1]])
             im = NonUniformImage(ax, interpolation='bilinear')
             im.set_data(xcenters, ycenters, self.H_T)
             ax.images.append(im)
-            plt.savefig(os.path.join(os.getcwd(), 'testHeatmap', f'{type(self).__name__}_{n_calls}.png'))
+            plt.savefig(os.path.join(os.getcwd(), heatmap_dir, self.run_name, f'{n_calls}.png'))

@@ -52,12 +52,13 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
         goal_selection_strategy: Union[GoalSelectionStrategy, str] = "future",
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
-        prioritize_occlusions: int = 0  # -1 is False, 0 is None, 1 is True
+        prioritize_occlusions: int = 0,  # -1 is False, 0 is None, 1 is True,
+        run_name: str = ""
     ):
 
         super(RecurrentHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                              goal_selection_strategy, online_sampling, handle_timeout_termination,
-                                                       prioritize_occlusions)
+                                                       prioritize_occlusions, run_name)
 
     def sample_goals(
         self,
