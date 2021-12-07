@@ -97,7 +97,7 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
             goals_to_assign = []
             for i, her_ep_idx in enumerate(her_episode_indices):
                 potential_goals = self._buffer["achieved_goal"][her_ep_idx, transitions_indices[her_indices[i]] + 1:].squeeze()
-                if len(potential_goals) == 3 * self.env.envs[0].hist_len and softmax(np.count_nonzero(potential_goals == 0.0, axis=-1)).flatten()[0] == 1:
+                if len(potential_goals) == 2 * self.env.envs[0].hist_len and softmax(np.count_nonzero(potential_goals == 0.0, axis=-1)).flatten()[0] == 1:
                     goals_to_assign.append(potential_goals)
                 else:
                     #print(potential_goals)
@@ -109,7 +109,7 @@ class RecurrentHerReplayBuffer(HerReplayBuffer):
             for i, her_ep_idx in enumerate(her_episode_indices):
                 potential_goals = self._buffer["achieved_goal"][her_ep_idx,
                                   transitions_indices[her_indices[i]] + 1:].squeeze()
-                if len(potential_goals) == 3 * self.env.envs[0].hist_len and softmax(np.count_nonzero(potential_goals, axis=-1)).flatten()[0] == 1:
+                if len(potential_goals) == 2 * self.env.envs[0].hist_len and softmax(np.count_nonzero(potential_goals, axis=-1)).flatten()[0] == 1:
                     goals_to_assign.append(potential_goals)
                 else:
                     goals_to_assign.append(potential_goals[np.random.choice(range(len(potential_goals)), p=softmax(
