@@ -53,11 +53,13 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
         prioritize_occlusions: int = 0,  # -1 is False, 0 is None, 1 is True,
-        run_name: str = ""
+        run_name: str = "",
+        dropout: float = 0.0
     ):
         super(RecurrentBeliefHerReplayBuffer, self).__init__(env, buffer_size, device, replay_buffer, max_episode_length, n_sampled_goal,
                                                              goal_selection_strategy, online_sampling, handle_timeout_termination,
                                                              prioritize_occlusions, run_name)
+        self.dropout = dropout
 
     def _sample_transitions(
         self,
@@ -130,6 +132,11 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
                                                                              self.info_buffer[episode_idx][transition_idx-1]
                                                                              for episode_idx, transition_idx in zip(her_episode_indices, her_transitions_indices)
                                                                          ])]), self.env.envs[0].hist_len)
+
+        #print(f"Relabeled Goals")
+        #print(transitions["desired_goal"][:int(len(transitions["desired_goal"])*0.25)])
+        choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
+        transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
 
         # Edge case: episode of one timesteps with the future strategy
         # no virtual transition can be created
