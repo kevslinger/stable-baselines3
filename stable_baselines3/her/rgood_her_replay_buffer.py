@@ -60,23 +60,27 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
                                                            n_sampled_goal, goal_selection_strategy, online_sampling,
                                                            handle_timeout_termination, prioritize_occlusions, run_name)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
+    def get_good_goals(self, her_indices: np.ndarray, orig_transitions_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
         """A good goal is defined as a goal that is not occluded.
         Arguments:
             her_indices: (numpy ndarray) The list of episodes which should be relabeled
-            transition_indices: (numpy ndarray) The list of transition indices which should be relabeled
+            orig_transitions_indices: (np.ndarray) The list of transition indices which are getting relabeled.
+            transition_indices: (numpy ndarray) The list of transition indices which we would normally relabel from.
             goal_dim: (int) The dimensionality of the environment's goal
         Returns:
             new_goals: (numpy ndarray) the newly relabeled goals from `her_indices` epidoes and `transition_indices`
             """
+        # Starts at the transition we sampled for HER, then works back towards the actual transition. If it can't find an unoccluded goal there,
+        # then keeps the original goal.
         new_goals = []
-        for idx, indices in enumerate(zip(her_indices, transition_indices)):
-            her_index, transition_index = indices
-            achieved_goal = self._buffer['achieved_goal'][her_index, transition_index][0]
+        for indices in zip(her_indices, orig_transitions_indices, transition_indices):
+            her_index, orig_index, transition_index = indices
             added_flag = False
-            for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
-                sample_goal = achieved_goal[-goal_dim*ag_idx:][:goal_dim]
-                if not np.array_equal(sample_goal, np.zeros(goal_dim)):
+            #for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
+            for goal_index in range(transition_index, orig_index, -1):
+                sample_goal = self._buffer['achieved_goal'][her_index, goal_index][0][-goal_dim:]
+                #sample_goal = achieved_goal[-goal_dim*ag_idx:][:goal_dim]
+                if not np.array_equal(sample_goal, -1 * np.ones(goal_dim)):
                     new_goals.append([sample_goal])
                     added_flag = True
                     break
@@ -90,7 +94,7 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         self,
         episode_indices: np.ndarray,
         her_indices: np.ndarray,
-        transitions_indices: np.ndarray,
+        orig_transitions_indices: np.ndarray,
     ) -> np.ndarray:
         """
         Sample goals based on goal_selection_strategy.
@@ -110,7 +114,7 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         elif self.goal_selection_strategy == GoalSelectionStrategy.FUTURE:
             # replay with random state which comes from the same episode and was observed after current transition
             transitions_indices = np.random.randint(
-                transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
+                orig_transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
             )
 
         elif self.goal_selection_strategy == GoalSelectionStrategy.EPISODE:
@@ -120,8 +124,8 @@ class RecurrentGoodHerReplayBuffer(HerReplayBuffer):
         else:
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
-        return np.tile(self.get_good_goals(her_episode_indices, transitions_indices), self.env.envs[0].hist_len)
-        #self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
+        return np.tile(self.get_good_goals(her_episode_indices, orig_transitions_indices, transitions_indices), self.env.envs[0].hist_len)
+        # return self._buffer["achieved_goal"][her_episode_indices, transitions_indices]
 
     def _sample_transitions(
         self,

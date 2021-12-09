@@ -60,7 +60,7 @@ class GoodHerReplayBuffer(HerReplayBuffer):
                                                   goal_selection_strategy, online_sampling, handle_timeout_termination,
                                                   prioritize_occlusions, run_name)
 
-    def get_good_goals(self, her_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
+    def get_good_goals(self, her_indices: np.ndarray, orig_transitions_indices: np.ndarray, transition_indices: np.ndarray, goal_dim: int = 2) -> np.ndarray:
         """A good goal is defined as a goal that is not occluded.
         Arguments:
             her_indices: (numpy ndarray) The list of episodes which should be relabeled
@@ -70,20 +70,19 @@ class GoodHerReplayBuffer(HerReplayBuffer):
             new_goals: (numpy ndarray) the newly relabeled goals from `her_indices` epidoes and `transition_indices`
             """
         new_goals = []
-        for idx, indices in enumerate(zip(her_indices, transition_indices)):
-            her_index, transition_index = indices
-
-            achieved_goal = self._buffer['achieved_goal'][her_index, transition_index][0]
+        for indices in zip(her_indices, orig_transitions_indices, transition_indices):
+            her_index, orig_index, transition_index = indices
             added_flag = False
-            for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
-                sample_goal = achieved_goal[-goal_dim*ag_idx:][:goal_dim]
-                if not np.array_equal(sample_goal, np.zeros(goal_dim)):
+            #for ag_idx in range(1, int(len(achieved_goal)/goal_dim) + 1):
+            for goal_index in range(transition_index, orig_index, -1):
+                sample_goal = self._buffer['achieved_goal'][her_index, goal_index][0]
+                if not np.array_equal(sample_goal, -1 * np.ones(goal_dim)):
                     new_goals.append([sample_goal])
                     added_flag = True
                     break
             # If we haven't added to new goals, just keep the same desired goal
             if not added_flag:
-                new_goals.append([self._buffer['desired_goal'][her_index, transition_index][0][-goal_dim:]])
+                new_goals.append([self._buffer['desired_goal'][her_index, transition_index][0]])
 
         return np.array(new_goals)
 
@@ -91,7 +90,7 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         self,
         episode_indices: np.ndarray,
         her_indices: np.ndarray,
-        transitions_indices: np.ndarray,
+        orig_transitions_indices: np.ndarray,
     ) -> np.ndarray:
         """
         Sample goals based on goal_selection_strategy.
@@ -111,7 +110,7 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         elif self.goal_selection_strategy == GoalSelectionStrategy.FUTURE:
             # replay with random state which comes from the same episode and was observed after current transition
             transitions_indices = np.random.randint(
-                transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
+                orig_transitions_indices[her_indices] + 1, self.episode_lengths[her_episode_indices]
             )
 
         elif self.goal_selection_strategy == GoalSelectionStrategy.EPISODE:
@@ -121,7 +120,7 @@ class GoodHerReplayBuffer(HerReplayBuffer):
         else:
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
-        return self.get_good_goals(her_episode_indices, transitions_indices)
+        return self.get_good_goals(her_episode_indices, orig_transitions_indices, transitions_indices)
 
     def _sample_transitions(
         self,

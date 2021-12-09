@@ -166,7 +166,8 @@ class ReplayBuffer(DictReplayBuffer):
         minibatch = self._sample_transitions(batch_size, maybe_vec_env=env)  # pytype: disable=bad-return-type
         reward_fraction = 100 * (len(minibatch.rewards) - th.count_nonzero(minibatch.rewards)) / len(minibatch.rewards)
         self.reward_frac.append(reward_fraction.item())
-        occluded_goal_fraction = 100 * (len(minibatch.observations['desired_goal']) - th.count_nonzero(th.count_nonzero(minibatch.observations['desired_goal'], axis=1))) / len(minibatch.observations['desired_goal'])
+        #occluded_goal_fraction = 100 * (len(minibatch.observations['desired_goal']) - th.count_nonzero(th.count_nonzero(minibatch.observations['desired_goal'], axis=1))) / len(minibatch.observations['desired_goal'])
+        occluded_goal_fraction = 100 * th.count_nonzero(th.sum(minibatch.observations['desired_goal'] == -1, axis=1)) / len(minibatch.observations['desired_goal'])
         self.occluded_goal_frac.append(occluded_goal_fraction.item())
         return minibatch
 
