@@ -153,8 +153,9 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
 
         #print(f"Relabeled Goals")
         #print(transitions["desired_goal"][:int(len(transitions["desired_goal"])*0.25)])
-        choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
-        transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
+        if self.dropout > 0.0:
+            choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
+            transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
 
         # concatenate observation with (desired) goal
         observations = self._normalize_obs(transitions, maybe_vec_env)
