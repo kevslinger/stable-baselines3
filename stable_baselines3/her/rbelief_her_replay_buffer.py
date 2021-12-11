@@ -133,11 +133,6 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
                                                                              for episode_idx, transition_idx in zip(her_episode_indices, her_transitions_indices)
                                                                          ])]), self.env.envs[0].hist_len)
 
-        #print(f"Relabeled Goals")
-        #print(transitions["desired_goal"][:int(len(transitions["desired_goal"])*0.25)])
-        choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
-        transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
-
         # Edge case: episode of one timesteps with the future strategy
         # no virtual transition can be created
         if len(her_indices) > 0:
@@ -155,6 +150,11 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
                 transitions["desired_goal"][her_indices, 0],
                 transitions["info"][her_indices, 0],
             )
+
+        #print(f"Relabeled Goals")
+        #print(transitions["desired_goal"][:int(len(transitions["desired_goal"])*0.25)])
+        choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
+        transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
 
         # concatenate observation with (desired) goal
         observations = self._normalize_obs(transitions, maybe_vec_env)
