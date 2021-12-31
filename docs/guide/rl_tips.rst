@@ -8,6 +8,11 @@ The aim of this section is to help you doing reinforcement learning experiments.
 It covers general advice about RL (where to start, which algorithm to choose, how to evaluate an algorithm, ...),
 as well as tips and tricks when using a custom environment or implementing an RL algorithm.
 
+.. note::
+
+  We have a `video on YouTube <https://www.youtube.com/watch?v=Ikngt0_DXJg>`_ that covers
+  this section in more details. You can also find the `slides here <https://araffin.github.io/slides/rlvs-tips-tricks/>`_.
+
 
 General advice when using Reinforcement Learning
 ================================================
@@ -194,15 +199,15 @@ If you want to quickly try a random agent on your environment, you can also do:
 
 .. code-block:: python
 
-	env = YourEnv()
-	obs = env.reset()
-	n_steps = 10
-	for _ in range(n_steps):
-	    # Random action
-	    action = env.action_space.sample()
-	    obs, reward, done, info = env.step(action)
-			if done:
-				obs = env.reset()
+  env = YourEnv()
+  obs = env.reset()
+  n_steps = 10
+  for _ in range(n_steps):
+      # Random action
+      action = env.action_space.sample()
+      obs, reward, done, info = env.step(action)
+      if done:
+          obs = env.reset()
 
 
 **Why should I normalize the action space?**

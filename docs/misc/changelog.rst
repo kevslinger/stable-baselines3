@@ -4,18 +4,137 @@ Changelog
 ==========
 
 
-Release 1.2.0a0 (WIP)
+Release 1.3.1a8 (WIP)
 ---------------------------
 
 Breaking Changes:
 ^^^^^^^^^^^^^^^^^
+- Dropped python 3.6 support (as announced in previous release)
+- Renamed ``mask`` argument of the ``predict()`` method to ``episode_start`` (used with RNN policies only)
+- local variables ``action``, ``done`` and ``reward`` were renamed to their plural form for offpolicy algorithms (``actions``, ``dones``, ``rewards``),
+  this may affect custom callbacks.
+- Removed ``episode_reward`` field from ``RolloutReturn()`` type
+
+New Features:
+^^^^^^^^^^^^^
+- Added ``norm_obs_keys`` param for ``VecNormalize`` wrapper to configure which observation keys to normalize (@kachayev)
+- Added experimental support to train off-policy algorithms with multiple envs (note: ``HerReplayBuffer`` currently not supported)
+- Handle timeout termination properly for on-policy algorithms (when using ``TimeLimit``)
+- Added ``skip`` option to ``VecTransposeImage`` to skip transforming the channel order when the heuristic is wrong
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed a bug where ``set_env()`` with ``VecNormalize`` would result in an error with off-policy algorithms (thanks @cleversonahum)
+- FPS calculation is now performed based on number of steps performed during last ``learn`` call, even when ``reset_num_timesteps`` is set to ``False`` (@kachayev)
+- Fixed evaluation script for recurrent policies (experimental feature in SB3 contrib)
+- Fixed a bug where the observation would be incorrectly detected as non-vectorized instead of throwing an error
+- The env checker now properly checks and warns about potential issues for continuous action spaces when the boundaries are too small or when the dtype is not float32
+- Fixed a bug in ``VecFrameStack`` with channel first image envs, where the terminal observation would be wrongly created.
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+- Added a warning in the env checker when not using ``np.float32`` for continuous actions
+- Improved test coverage and error message when checking shape of observation
+- Added ``newline="\n"`` when opening CSV monitor files so that each line ends with ``\r\n`` instead of ``\r\r\n`` on Windows while Linux environments are not affected (@hsuehch)
+- Fixed ``device`` argument inconsistency (@qgallouedec)
+
+Documentation:
+^^^^^^^^^^^^^^
+- Add drivergym to projects page (@theDebugger811)
+- Add highway-env to projects page (@eleurent)
+- Add tactile-gym to projects page (@ac-93)
+- Fix indentation in the RL tips page (@cove9988)
+- Update GAE computation docstring
+- Add documentation on exporting to TFLite/Coral
+- Added JMLR paper and updated citation
+- Added link to RL Tips and Tricks video
+- Updated ``BaseAlgorithm.load`` docstring (@Demetrio92)
+- Added a note on ``load`` behavior in the examples (@Demetrio92)
+- Updated SB3 Contrib doc
+- Fixed A2C and migration guide guidance on how to set epsilon with RMSpropTFLike (@thomasgubler)
+
+Release 1.3.0 (2021-10-23)
+---------------------------
+
+*Bug fixes and improvements for the user*
+
+.. warning::
+
+  This version will be the last one supporting Python 3.6 (end of life in Dec 2021).
+  We highly recommended you to upgrade to Python >= 3.7.
+
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+- ``sde_net_arch`` argument in policies is deprecated and will be removed in a future version.
+- ``_get_latent`` (``ActorCriticPolicy``) was removed
+- All logging keys now use underscores instead of spaces (@timokau). Concretely this changes:
+
+    - ``time/total timesteps`` to ``time/total_timesteps`` for off-policy algorithms (PPO and A2C) and the eval callback (on-policy algorithms already used the underscored version),
+    - ``rollout/exploration rate`` to ``rollout/exploration_rate`` and
+    - ``rollout/success rate`` to ``rollout/success_rate``.
+
+New Features:
+^^^^^^^^^^^^^
+- Added methods ``get_distribution`` and ``predict_values`` for ``ActorCriticPolicy`` for A2C/PPO/TRPO (@cyprienc)
+- Added methods ``forward_actor`` and ``forward_critic`` for ``MlpExtractor``
+- Added ``sb3.get_system_info()`` helper function to gather version information relevant to SB3 (e.g., Python and PyTorch version)
+- Saved models now store system information where agent was trained, and load functions have ``print_system_info`` parameter to help debugging load issues
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed ``dtype`` of observations for ``SimpleMultiObsEnv``
+- Allow `VecNormalize` to wrap discrete-observation environments to normalize reward
+  when observation normalization is disabled
+- Fixed a bug where ``DQN`` would throw an error when using ``Discrete`` observation and stochastic actions
+- Fixed a bug where sub-classed observation spaces could not be used
+- Added ``force_reset`` argument to ``load()`` and ``set_env()`` in order to be able to call ``learn(reset_num_timesteps=False)`` with a new environment
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+- Cap gym max version to 0.19 to avoid issues with atari-py and other breaking changes
+- Improved error message when using dict observation with the wrong policy
+- Improved error message when using ``EvalCallback`` with two envs not wrapped the same way.
+- Added additional infos about supported python version for PyPi in ``setup.py``
+
+Documentation:
+^^^^^^^^^^^^^^
+- Add Rocket League Gym to list of supported projects (@AechPro)
+- Added gym-electric-motor to project page (@wkirgsn)
+- Added policy-distillation-baselines to project page (@CUN-bjy)
+- Added ONNX export instructions (@batu)
+- Update read the doc env (fixed ``docutils`` issue)
+- Fix PPO environment name (@IljaAvadiev)
+- Fix custom env doc and add env registration example
+- Update algorithms from SB3 Contrib
+- Use underscores for numeric literals in examples to improve clarity
+
+Release 1.2.0 (2021-09-03)
+---------------------------
+
+**Hotfix for VecNormalize, training/eval mode support**
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
 - SB3 now requires PyTorch >= 1.8.1
+- ``VecNormalize`` ``ret`` attribute was renamed to ``returns``
 
 New Features:
 ^^^^^^^^^^^^^
 
 Bug Fixes:
 ^^^^^^^^^^
+- Hotfix for ``VecNormalize`` where the observation filter was not updated at reset (thanks @vwxyzjn)
+- Fixed model predictions when using batch normalization and dropout layers by calling ``train()`` and ``eval()`` (@davidblom603)
+- Fixed model training for DQN, TD3 and SAC so that their target nets always remain in evaluation mode (@ayeright)
+- Passing ``gradient_steps=0`` to an off-policy algorithm will result in no gradient steps being taken (vs as many gradient steps as steps done in the environment
+  during the rollout in previous versions)
 
 Deprecations:
 ^^^^^^^^^^^^^
@@ -23,11 +142,15 @@ Deprecations:
 Others:
 ^^^^^^^
 - Enabled Python 3.9 in GitHub CI
+- Fixed type annotations
+- Refactored ``predict()`` by moving the preprocessing to ``obs_to_tensor()`` method
 
 Documentation:
 ^^^^^^^^^^^^^^
 - Updated multiprocessing example
 - Added example of ``VecEnvWrapper``
+- Added a note about logging to tensorboard more often
+- Added warning about simplicity of examples and link to RL zoo (@MihaiAnca13)
 
 
 Release 1.1.0 (2021-07-01)
@@ -733,5 +856,7 @@ And all the contributors:
 @tirafesi @blurLake @koulakis @joeljosephjin @shwang @rk37 @andyshih12 @RaphaelWag @xicocaio
 @diditforlulz273 @liorcohen5 @ManifoldFR @mloo3 @SwamyDev @wmmc88 @megan-klaiber @thisray
 @tfederico @hn2 @LucasAlegre @AptX395 @zampanteymedio @JadenTravnik @decodyng @ardabbour @lorenz-h @mschweizer @lorepieri8 @vwxyzjn
-@ShangqunYu @PierreExeter @JacopoPan @ltbd78 @tom-doerr @Atlis @liusida @09tangriro @amy12xx @juancroldan @benblack769 @bstee615
-@c-rizz @skandermoalla
+@ShangqunYu @PierreExeter @JacopoPan @ltbd78 @tom-doerr @Atlis @liusida @09tangriro @amy12xx @juancroldan
+@benblack769 @bstee615 @c-rizz @skandermoalla @MihaiAnca13 @davidblom603 @ayeright @cyprienc
+@wkirgsn @AechPro @CUN-bjy @batu @IljaAvadiev @timokau @kachayev @cleversonahum
+@eleurent @ac-93 @cove9988 @theDebugger811 @hsuehch @Demetrio92 @thomasgubler

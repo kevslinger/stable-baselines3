@@ -79,6 +79,13 @@ class DummyDictEnv(gym.Env):
         pass
 
 
+@pytest.mark.parametrize("policy", ["MlpPolicy", "CnnPolicy"])
+def test_policy_hint(policy):
+    # Common mistake: using the wrong policy
+    with pytest.raises(ValueError):
+        PPO(policy, BitFlippingEnv(n_bits=4))
+
+
 @pytest.mark.parametrize("model_class", [PPO, A2C])
 def test_goal_env(model_class):
     env = BitFlippingEnv(n_bits=4)
@@ -177,19 +184,19 @@ def test_dict_spaces(model_class, channel_last):
     evaluate_policy(model, env, n_eval_episodes=5, warn=False)
 
 
-@pytest.mark.parametrize("model_class", [PPO, A2C])
+@pytest.mark.parametrize("model_class", [PPO, A2C, SAC, DQN])
 def test_multiprocessing(model_class):
     use_discrete_actions = model_class not in [SAC, TD3, DDPG]
 
     def make_env():
         env = DummyDictEnv(use_discrete_actions=use_discrete_actions, channel_last=False)
-        env = gym.wrappers.TimeLimit(env, 100)
+        env = gym.wrappers.TimeLimit(env, 50)
         return env
 
     env = make_vec_env(make_env, n_envs=2, vec_env_cls=SubprocVecEnv)
 
     kwargs = {}
-    n_steps = 256
+    n_steps = 128
 
     if model_class in {A2C, PPO}:
         kwargs = dict(
@@ -198,6 +205,15 @@ def test_multiprocessing(model_class):
                 net_arch=[32],
                 features_extractor_kwargs=dict(cnn_output_dim=32),
             ),
+        )
+    elif model_class in {SAC, TD3, DQN}:
+        kwargs = dict(
+            buffer_size=1000,
+            policy_kwargs=dict(
+                net_arch=[32],
+                features_extractor_kwargs=dict(cnn_output_dim=16),
+            ),
+            train_freq=5,
         )
 
     model = model_class("MultiInputPolicy", env, gamma=0.5, seed=1, **kwargs)
@@ -259,8 +275,8 @@ def test_vec_normalize(model_class):
     Additional tests for PPO/A2C/SAC/DDPG/TD3/DQN to check observation space support
     for GoalEnv and VecNormalize using MultiInputPolicy.
     """
-    env = DummyVecEnv([lambda: BitFlippingEnv(n_bits=4, continuous=not (model_class == DQN))])
-    env = VecNormalize(env)
+    env = DummyVecEnv([lambda: gym.wrappers.TimeLimit(DummyDictEnv(use_discrete_actions=model_class == DQN), 100)])
+    env = VecNormalize(env, norm_obs_keys=["vec"])
 
     kwargs = {}
     n_steps = 256

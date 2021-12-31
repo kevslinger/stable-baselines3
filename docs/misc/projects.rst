@@ -6,6 +6,15 @@ Projects
 This is a list of projects using stable-baselines3.
 Please tell us, if you want your project to appear on this page ;)
 
+DriverGym
+---------
+
+An open-source Gym-compatible environment specifically tailored for developing RL algorithms for autonomous driving. DriverGym provides access to more than 1000 hours of expert logged data and also supports reactive and data-driven agent behavior. The performance of an RL policy can be easily validated using an extensive and flexible closed-loop evaluation protocol. We also provide behavior cloning baselines using supervised learning and RL, trained in DriverGym.
+
+| Authors: Parth Kothari, Christian Perone, Luca Bergamini, Alexandre Alahi, Peter Ondruska
+| Github: https://github.com/lyft/l5kit
+| Paper: https://arxiv.org/abs/2111.06889 
+
 
 RL Reach
 --------
@@ -74,3 +83,70 @@ SuperSuit contains easy to use wrappers for Gym (and multi-agent PettingZoo) env
 | Author: Justin Terry
 | GitHub: https://github.com/PettingZoo-Team/SuperSuit
 | Tutorial on multi-agent support in stable baselines: https://towardsdatascience.com/multi-agent-deep-reinforcement-learning-in-15-lines-of-code-using-pettingzoo-e0b963c0820b
+
+Rocket League Gym
+-----------------
+
+A fully custom python API and C++ DLL to treat the popular game Rocket League like an OpenAI Gym environment.
+
+- Dramatically increases the rate at which the game runs.
+- Supports full configuration of initial states, observations, rewards, and terminal states.
+- Supports multiple simultaneous game clients.
+- Supports multi-agent training and self-play.
+- Provides custom wrappers for easy use with stable-baselines3.
+
+| Authors: Lucas Emery, Matthew Allen
+| GitHub: https://github.com/lucas-emery/rocket-league-gym
+| Website: https://rlgym.github.io
+
+gym-electric-motor
+-------------------
+
+An OpenAI gym environment for the simulation and control of electric drive trains.
+Think of Matlab/Simulink for electric motors, inverters, and load profiles, but non-graphical and open-source in Python.
+
+`gym-electric-motor` offers a rich interface for customization, including
+- plug-and-play of different control algorithms ranging from classical controllers (like field-oriented control) up to any RL agent you can find,
+- reward shaping,
+- load profiling,
+- finite-set or continuous-set control,
+- one-phase and three-phase motors such as induction machines and permanent magnet synchronous motors, among others.
+
+SB3 is used as an example in one of many tutorials showcasing the easy usage of `gym-electric-motor`.
+
+| Author: `Paderborn University, LEA department <https://github.com/upb-lea>`_
+| GitHub: https://github.com/upb-lea/gym-electric-motor
+| SB3 Tutorial: `Colab Link <https://colab.research.google.com/github/upb-lea/gym-electric-motor/blob/master/examples/reinforcement_learning_controllers/stable_baselines3_dqn_disc_pmsm_example.ipynb>`_
+| Paper: `JOSS <https://joss.theoj.org/papers/10.21105/joss.02498>`_, `TNNLS <https://ieeexplore.ieee.org/document/9241851>`_, `ArXiv <https://arxiv.org/abs/1910.09434>`_
+
+policy-distillation-baselines
+------------------------------
+A PyTorch implementation of Policy Distillation for control, which has well-trained teachers via Stable Baselines3.
+
+- `policy-distillation-baselines` provides some good examples for policy distillation in various environment and using reliable algorithms.
+- All well-trained models and algorithms are compatible with Stable Baselines3.
+
+| Authors: Junyeob Baek
+| GitHub: https://github.com/CUN-bjy/policy-distillation-baselines
+| Demo: `link <https://github.com/CUN-bjy/policy-distillation-baselines/issues/3#issuecomment-817730173>`_
+
+highway-env
+-------------------
+
+A minimalist environment for decision-making in Autonomous Driving.
+
+Driving policies can be trained in different scenarios, and several notebooks using SB3 are provided as examples.
+
+| Author: `Edouard Leurent <https://edouardleurent.com>`_
+| GitHub: https://github.com/eleurent/highway-env
+| Examples: `Colab Links <https://github.com/eleurent/highway-env/tree/master/scripts#using-stable-baselines3>`_
+
+tactile-gym
+-------------------
+
+Suite of RL environments focussed on using a simulated tactile sensor as the primary source of observations. Sim-to-Real results across 4 out of 5 proposed envs.
+
+| Author: Alex Church
+| GitHub: https://github.com/ac-93/tactile_gym
+| Paper: https://arxiv.org/abs/2106.08796
+| Website: `tactile-gym website <https://sites.google.com/my.bristol.ac.uk/tactile-gym-sim2real/home>`_

@@ -13,7 +13,7 @@ To use Tensorboard with stable baselines3, you simply need to pass the location 
     from stable_baselines3 import A2C
 
     model = A2C('MlpPolicy', 'CartPole-v1', verbose=1, tensorboard_log="./a2c_cartpole_tensorboard/")
-    model.learn(total_timesteps=10000)
+    model.learn(total_timesteps=10_000)
 
 
 You can also define custom logging name when training (by default it is the algorithm name)
@@ -23,11 +23,11 @@ You can also define custom logging name when training (by default it is the algo
     from stable_baselines3 import A2C
 
     model = A2C('MlpPolicy', 'CartPole-v1', verbose=1, tensorboard_log="./a2c_cartpole_tensorboard/")
-    model.learn(total_timesteps=10000, tb_log_name="first_run")
+    model.learn(total_timesteps=10_000, tb_log_name="first_run")
     # Pass reset_num_timesteps=False to continue the training curve in tensorboard
     # By default, it will create a new curve
-    model.learn(total_timesteps=10000, tb_log_name="second_run", reset_num_timesteps=False)
-    model.learn(total_timesteps=10000, tb_log_name="third_run", reset_num_timesteps=False)
+    model.learn(total_timesteps=10_000, tb_log_name="second_run", reset_num_timesteps=False)
+    model.learn(total_timesteps=10_000, tb_log_name="third_run", reset_num_timesteps=False)
 
 
 Once the learn function is called, you can monitor the RL agent during or after the training, with the following bash command:
@@ -80,6 +80,13 @@ Here is a simple example on how to log both additional tensor or arbitrary scala
 
 
     model.learn(50000, callback=TensorboardCallback())
+
+
+.. note::
+
+  If you want to log values more often than the default to tensorboard, you manually call ``self.logger.dump(self.num_timesteps)`` in a callback
+  (see `issue #506 <https://github.com/DLR-RM/stable-baselines3/issues/506>`_).
+
 
 Logging Images
 --------------
@@ -230,7 +237,7 @@ Here is an example of how to render an episode and log the resulting video to Te
 Directly Accessing The Summary Writer
 -------------------------------------
 
-If you would like to log arbitrary data (in one of the formats supported by `pytorch <https://pytorch.org/docs/stable/tensorboard.html>`_), you 
+If you would like to log arbitrary data (in one of the formats supported by `pytorch <https://pytorch.org/docs/stable/tensorboard.html>`_), you
 can get direct access to the underlying SummaryWriter in a callback:
 
 .. warning::

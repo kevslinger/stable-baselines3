@@ -14,7 +14,7 @@ It uses multiple workers to avoid the use of a replay buffer.
 
   If you find training unstable or want to match performance of stable-baselines A2C, consider using
   ``RMSpropTFLike`` optimizer from ``stable_baselines3.common.sb2_compat.rmsprop_tf_like``.
-  You can change optimizer with ``A2C(policy_kwargs=dict(optimizer_class=RMSpropTFLike, eps=1e-5))``.
+  You can change optimizer with ``A2C(policy_kwargs=dict(optimizer_class=RMSpropTFLike, optimizer_kwargs=dict(eps=1e-5)))``.
   Read more `here <https://github.com/DLR-RM/stable-baselines3/pull/110#issuecomment-663255241>`_.
 
 
@@ -46,6 +46,8 @@ Dict          ❌     ✔️
 
 Example
 -------
+
+This example is only to demonstrate the use of the library and its functions, and the trained agents may not solve the environments. Optimized hyperparameters can be found in RL Zoo `repository <https://github.com/DLR-RM/rl-baselines3-zoo>`_.
 
 Train a A2C agent on ``CartPole-v1`` using 4 environments.
 

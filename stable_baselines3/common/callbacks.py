@@ -298,8 +298,8 @@ class EvalCallback(EventCallback):
         callback_on_new_best: Optional[BaseCallback] = None,
         n_eval_episodes: int = 5,
         eval_freq: int = 10000,
-        log_path: str = None,
-        best_model_save_path: str = None,
+        log_path: Optional[str] = None,
+        best_model_save_path: Optional[str] = None,
         deterministic: bool = True,
         render: bool = False,
         verbose: int = 1,
@@ -362,7 +362,15 @@ class EvalCallback(EventCallback):
 
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
             # Sync training and eval env if there is VecNormalize
-            sync_envs_normalization(self.training_env, self.eval_env)
+            if self.model.get_vec_normalize_env() is not None:
+                try:
+                    sync_envs_normalization(self.training_env, self.eval_env)
+                except AttributeError:
+                    raise AssertionError(
+                        "Training and eval env are not wrapped the same way, "
+                        "see https://stable-baselines3.readthedocs.io/en/master/guide/callbacks.html#evalcallback "
+                        "and warning above."
+                    )
 
             # Reset success rate buffer
             self._is_success_buffer = []
@@ -415,7 +423,7 @@ class EvalCallback(EventCallback):
                 self.logger.record("eval/success_rate", success_rate)
 
             # Dump log so the evaluation results are printed with the correct timestep
-            self.logger.record("time/total timesteps", self.num_timesteps, exclude="tensorboard")
+            self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
             self.logger.dump(self.num_timesteps)
 
             if mean_reward > self.best_mean_reward:
@@ -511,11 +519,9 @@ class StopTrainingOnMaxEpisodes(BaseCallback):
         self._total_max_episodes = self.max_episodes * self.training_env.num_envs
 
     def _on_step(self) -> bool:
-        # Checking for both 'done' and 'dones' keywords because:
-        # Some models use keyword 'done' (e.g.,: SAC, TD3, DQN, DDPG)
-        # While some models use keyword 'dones' (e.g.,: A2C, PPO)
-        done_array = np.array(self.locals.get("done") if self.locals.get("done") is not None else self.locals.get("dones"))
-        self.n_episodes += np.sum(done_array).item()
+        # Check that the `dones` local variable is defined
+        assert "dones" in self.locals, "`dones` variable is not defined, please check your code next to `callback.on_step()`"
+        self.n_episodes += np.sum(self.locals["dones"]).item()
 
         continue_training = self.n_episodes < self._total_max_episodes
 

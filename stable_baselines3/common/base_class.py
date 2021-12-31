@@ -25,6 +25,7 @@ from stable_baselines3.common.utils import (
     check_for_correct_spaces,
     get_device,
     get_schedule_fn,
+    get_system_info,
     set_random_seed,
     update_learning_rate,
 )
@@ -88,7 +89,7 @@ class BaseAlgorithm(ABC):
         env: Union[GymEnv, str, None],
         policy_base: Type[BasePolicy],
         learning_rate: Union[float, Schedule],
-        policy_kwargs: Dict[str, Any] = None,
+        policy_kwargs: Optional[Dict[str, Any]] = None,
         tensorboard_log: Optional[str] = None,
         verbose: int = 0,
         device: Union[th.device, str] = "auto",
@@ -121,6 +122,8 @@ class BaseAlgorithm(ABC):
         self.num_timesteps = 0
         # Used for updating schedules
         self._total_timesteps = 0
+        # Used for computing fps, it is updated at each call of learn()
+        self._num_timesteps_at_start = 0
         self.eval_env = None
         self.seed = seed
         self.action_noise = None  # type: Optional[ActionNoise]
@@ -174,6 +177,10 @@ class BaseAlgorithm(ABC):
                 raise ValueError(
                     "Error: the model does not support multiple envs; it requires " "a single vectorized environment."
                 )
+
+            # Catch common mistake: using MlpPolicy/CnnPolicy instead of MultiInputPolicy
+            if policy in ["MlpPolicy", "CnnPolicy"] and isinstance(self.observation_space, gym.spaces.Dict):
+                raise ValueError(f"You must use `MultiInputPolicy` when working with dict observation space, not {policy}")
 
             if self.use_sde and not isinstance(self.action_space, gym.spaces.Box):
                 raise ValueError("generalized State-Dependent Exploration (gSDE) can only be used with continuous actions.")
@@ -399,6 +406,7 @@ class BaseAlgorithm(ABC):
         :return:
         """
         self.start_time = time.time()
+
         if self.ep_info_buffer is None or reset_num_timesteps:
             # Initialize buffers if they don't exist, or reinitialize if resetting counters
             self.ep_info_buffer = deque(maxlen=100)
@@ -414,6 +422,7 @@ class BaseAlgorithm(ABC):
             # Make sure training timesteps are ahead of the internal counter
             total_timesteps += self.num_timesteps
         self._total_timesteps = total_timesteps
+        self._num_timesteps_at_start = self.num_timesteps
 
         # Avoid resetting the environment when calling ``.learn()`` consecutive times
         if reset_num_timesteps or self._last_obs is None:
@@ -472,7 +481,7 @@ class BaseAlgorithm(ABC):
         """
         return self._vec_normalize_env
 
-    def set_env(self, env: GymEnv) -> None:
+    def set_env(self, env: GymEnv, force_reset: bool = True) -> None:
         """
         Checks the validity of the environment, and if it is coherent, set it as the current environment.
         Furthermore wrap any non vectorized env into a vectorized
@@ -481,12 +490,23 @@ class BaseAlgorithm(ABC):
         - action_space
 
         :param env: The environment for learning a policy
+        :param force_reset: Force call to ``reset()`` before training
+            to avoid unexpected behavior.
+            See issue https://github.com/DLR-RM/stable-baselines3/issues/597
         """
         # if it is not a VecEnv, make it a VecEnv
         # and do other transformations (dict obs, image transpose) if needed
         env = self._wrap_env(env, self.verbose)
         # Check that the observation spaces match
         check_for_correct_spaces(env, self.observation_space, self.action_space)
+        # Update VecNormalize object
+        # otherwise the wrong env may be used, see https://github.com/DLR-RM/stable-baselines3/issues/637
+        self._vec_normalize_env = unwrap_vec_normalize(env)
+
+        # Discard `_last_obs`, this will force the env to reset before training
+        # See issue https://github.com/DLR-RM/stable-baselines3/issues/597
+        if force_reset:
+            self._last_obs = None
 
         self.n_envs = env.num_envs
         self.env = env
@@ -522,21 +542,24 @@ class BaseAlgorithm(ABC):
     def predict(
         self,
         observation: np.ndarray,
-        state: Optional[np.ndarray] = None,
-        mask: Optional[np.ndarray] = None,
+        state: Optional[Tuple[np.ndarray, ...]] = None,
+        episode_start: Optional[np.ndarray] = None,
         deterministic: bool = False,
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    ) -> Tuple[np.ndarray, Optional[Tuple[np.ndarray, ...]]]:
         """
-        Get the model's action(s) from an observation
+        Get the policy action from an observation (and optional hidden state).
+        Includes sugar-coating to handle different observations (e.g. normalizing images).
 
         :param observation: the input observation
-        :param state: The last states (can be None, used in recurrent policies)
-        :param mask: The last masks (can be None, used in recurrent policies)
+        :param state: The last hidden states (can be None, used in recurrent policies)
+        :param episode_start: The last masks (can be None, used in recurrent policies)
+            this correspond to beginning of episodes,
+            where the hidden states of the RNN must be reset.
         :param deterministic: Whether or not to return deterministic actions.
-        :return: the model's action and the next state
+        :return: the model's action and the next hidden state
             (used in recurrent policies)
         """
-        return self.policy.predict(observation, state, mask, deterministic)
+        return self.policy.predict(observation, state, episode_start, deterministic)
 
     def set_random_seed(self, seed: Optional[int] = None) -> None:
         """
@@ -629,10 +652,14 @@ class BaseAlgorithm(ABC):
         env: Optional[GymEnv] = None,
         device: Union[th.device, str] = "auto",
         custom_objects: Optional[Dict[str, Any]] = None,
+        print_system_info: bool = False,
+        force_reset: bool = True,
         **kwargs,
     ) -> "BaseAlgorithm":
         """
-        Load the model from a zip-file
+        Load the model from a zip-file.
+        Warning: ``load`` re-creates the model from scratch, it does not update it in-place!
+        For an in-place load use ``set_parameters`` instead.
 
         :param path: path to the file (or a file-like) where to
             load the agent from
@@ -645,9 +672,21 @@ class BaseAlgorithm(ABC):
             will be used instead. Similar to custom_objects in
             ``keras.models.load_model``. Useful when you have an object in
             file that can not be deserialized.
+        :param print_system_info: Whether to print system info from the saved model
+            and the current system info (useful to debug loading issues)
+        :param force_reset: Force call to ``reset()`` before training
+            to avoid unexpected behavior.
+            See https://github.com/DLR-RM/stable-baselines3/issues/597
         :param kwargs: extra arguments to change the model when loading
+        :return: new model instance with loaded parameters
         """
-        data, params, pytorch_variables = load_from_zip_file(path, device=device, custom_objects=custom_objects)
+        if print_system_info:
+            print("== CURRENT SYSTEM INFO ==")
+            get_system_info()
+
+        data, params, pytorch_variables = load_from_zip_file(
+            path, device=device, custom_objects=custom_objects, print_system_info=print_system_info
+        )
 
         # Remove stored device information and replace with ours
         if "policy_kwargs" in data:
@@ -668,6 +707,10 @@ class BaseAlgorithm(ABC):
             env = cls._wrap_env(env, data["verbose"])
             # Check if given env is valid
             check_for_correct_spaces(env, data["observation_space"], data["action_space"])
+            # Discard `_last_obs`, this will force the env to reset before training
+            # See issue https://github.com/DLR-RM/stable-baselines3/issues/597
+            if force_reset and data is not None:
+                data["_last_obs"] = None
         else:
             # Use stored env, if one exists. If not, continue as is (can be used for predict)
             if "env" in data:

@@ -3,6 +3,11 @@
 Examples
 ========
 
+.. note::
+
+        These examples are only to demonstrate the use of the library and its functions, and the trained agents may not solve the environments. Optimized               hyperparameters can be found in the RL Zoo `repository <https://github.com/DLR-RM/rl-baselines3-zoo>`_.
+
+
 Try it online with Colab Notebooks!
 -----------------------------------
 
@@ -51,10 +56,11 @@ In the following example, we will train, save and load a DQN model on the Lunar 
   LunarLander requires the python package ``box2d``.
   You can install it using ``apt install swig`` and then ``pip install box2d box2d-kengz``
 
-.. .. note::
-..   ``load`` function re-creates model from scratch on each call, which can be slow.
-..   If you need to e.g. evaluate same model with multiple different sets of parameters, consider
-..   using ``load_parameters`` instead.
+.. warning::
+  ``load`` method re-creates the model from scratch and should be called on the Algorithm without instantiating it first,
+  e.g. ``model = DQN.load("dqn_lunar", env=env)`` instead of ``model = DQN(env=env)`` followed by  ``model.load("dqn_lunar")``. The latter **will not work** as ``load`` is not an in-place operation.
+  If you want to load parameters without re-creating the model, e.g. to evaluate the same model
+  with multiple different sets of parameters, consider using ``set_parameters`` instead.
 
 .. code-block:: python
 
@@ -76,6 +82,9 @@ In the following example, we will train, save and load a DQN model on the Lunar 
   del model  # delete trained model to demonstrate loading
 
   # Load the trained agent
+  # NOTE: if you have loading issue, you can pass `print_system_info=True`
+  # to compare the system on which the model was trained vs the current one
+  # model = DQN.load("dqn_lunar", env=env, print_system_info=True)
   model = DQN.load("dqn_lunar", env=env)
 
   # Evaluate the agent
@@ -141,13 +150,40 @@ Multiprocessing: Unleashing the Power of Vectorized Environments
       # env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
 
       model = PPO('MlpPolicy', env, verbose=1)
-      model.learn(total_timesteps=25000)
+      model.learn(total_timesteps=25_000)
 
       obs = env.reset()
       for _ in range(1000):
           action, _states = model.predict(obs)
           obs, rewards, dones, info = env.step(action)
           env.render()
+
+
+Multiprocessing with off-policy algorithms
+------------------------------------------
+
+.. warning::
+
+  When using multiple environments with off-policy algorithms, you should update the ``gradient_steps``
+  parameter too. Set it to ``gradient_steps=-1`` to perform as many gradient steps as transitions collected.
+  There is usually a compromise between wall-clock time and sample efficiency,
+  see this `example in PR #439 <https://github.com/DLR-RM/stable-baselines3/pull/439#issuecomment-961796799>`_
+
+
+.. code-block:: python
+
+  import gym
+
+  from stable_baselines3 import SAC
+  from stable_baselines3.common.env_util import make_vec_env
+
+  env = make_vec_env("Pendulum-v0", n_envs=4, seed=0)
+
+  # We collect 4 transitions per call to `ènv.step()`
+  # and performs 2 gradient steps per call to `ènv.step()`
+  # if gradient_steps=-1, then we would do 4 gradients steps per call to `ènv.step()`
+  model = SAC('MlpPolicy', env, train_freq=1, gradient_steps=2, verbose=1)
+  model.learn(total_timesteps=10_000)
 
 
 Dict Observations
@@ -169,7 +205,7 @@ These dictionaries are randomly initilaized on the creation of the environment a
   env = SimpleMultiObsEnv(random_start=False)
 
   model = PPO("MultiInputPolicy", env, verbose=1)
-  model.learn(total_timesteps=1e5)
+  model.learn(total_timesteps=100_000)
 
 
 Using Callback: Monitoring Training
@@ -209,12 +245,12 @@ If your callback returns False, training is aborted early.
       Callback for saving a model (the check is done every ``check_freq`` steps)
       based on the training reward (in practice, we recommend using ``EvalCallback``).
 
-      :param check_freq: (int)
-      :param log_dir: (str) Path to the folder where the model will be saved.
+      :param check_freq:
+      :param log_dir: Path to the folder where the model will be saved.
         It must contains the file created by the ``Monitor`` wrapper.
-      :param verbose: (int)
+      :param verbose: Verbosity level.
       """
-      def __init__(self, check_freq: int, log_dir: str, verbose=1):
+      def __init__(self, check_freq: int, log_dir: str, verbose: int = 1):
           super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
           self.check_freq = check_freq
           self.log_dir = log_dir
@@ -235,15 +271,15 @@ If your callback returns False, training is aborted early.
                 # Mean training reward over the last 100 episodes
                 mean_reward = np.mean(y[-100:])
                 if self.verbose > 0:
-                  print("Num timesteps: {}".format(self.num_timesteps))
-                  print("Best mean reward: {:.2f} - Last mean reward per episode: {:.2f}".format(self.best_mean_reward, mean_reward))
+                  print(f"Num timesteps: {self.num_timesteps}")
+                  print(f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}")
 
                 # New best model, you could save the agent here
                 if mean_reward > self.best_mean_reward:
                     self.best_mean_reward = mean_reward
                     # Example for saving best model
                     if self.verbose > 0:
-                      print("Saving new best model to {}".format(self.save_path))
+                      print(f"Saving new best model to {self.save_path}")
                     self.model.save(self.save_path)
 
           return True
@@ -305,7 +341,7 @@ and multiprocessing for you.
   env = VecFrameStack(env, n_stack=4)
 
   model = A2C('CnnPolicy', env, verbose=1)
-  model.learn(total_timesteps=25000)
+  model.learn(total_timesteps=25_000)
 
   obs = env.reset()
   while True:
@@ -487,10 +523,10 @@ linear and constant schedules.
 
   # Initial learning rate of 0.001
   model = PPO("MlpPolicy", "CartPole-v1", learning_rate=linear_schedule(0.001), verbose=1)
-  model.learn(total_timesteps=20000)
+  model.learn(total_timesteps=20_000)
   # By default, `reset_num_timesteps` is True, in which case the learning rate schedule resets.
   # progress_remaining = 1.0 - (num_timesteps / total_timesteps)
-  model.learn(total_timesteps=10000, reset_num_timesteps=True)
+  model.learn(total_timesteps=10_000, reset_num_timesteps=True)
 
 
 Advanced Saving and Loading
@@ -622,7 +658,7 @@ A2C policy gradient updates on the model.
 
   # Use traditional actor-critic policy gradient updates to
   # find good initial parameters
-  model.learn(total_timesteps=10000)
+  model.learn(total_timesteps=10_000)
 
   # Include only variables with "policy", "action" (policy) or "shared_net" (shared layers)
   # in their name: only these ones affect the action.
@@ -690,7 +726,7 @@ to keep track of the agent progress.
   venv = VecMonitor(venv=venv)
 
   model = PPO("MultiInputPolicy", venv, verbose=1)
-  model.learn(10000)
+  model.learn(10_000)
 
 
 Record a Video
@@ -718,7 +754,7 @@ Record a mp4 video (here using a random agent).
   # Record the video starting at the first step
   env = VecVideoRecorder(env, video_folder,
                          record_video_trigger=lambda x: x == 0, video_length=video_length,
-                         name_prefix="random-agent-{}".format(env_id))
+                         name_prefix=f"random-agent-{env_id}")
 
   env.reset()
   for _ in range(video_length + 1):
@@ -742,7 +778,7 @@ Bonus: Make a GIF of a Trained Agent
 
   from stable_baselines3 import A2C
 
-  model = A2C("MlpPolicy", "LunarLander-v2").learn(100000)
+  model = A2C("MlpPolicy", "LunarLander-v2").learn(100_000)
 
   images = []
   obs = model.env.reset()
