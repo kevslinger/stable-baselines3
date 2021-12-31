@@ -133,6 +133,12 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
                                                                              for episode_idx, transition_idx in zip(her_episode_indices, her_transitions_indices)
                                                                          ])]), self.env.envs[0].hist_len)
 
+        # TODO: Trying dropout before recomputing rewards with HER and also setting rewards to negative on the dropout transitions.
+        if self.dropout > 0.0:
+            choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
+            transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
+            transitions["reward"][choice, 0] = [-1.0 for _ in range(len(choice))]
+
         # Edge case: episode of one timesteps with the future strategy
         # no virtual transition can be created
         if len(her_indices) > 0:
@@ -153,9 +159,9 @@ class RecurrentBeliefHerReplayBuffer(HerReplayBuffer):
 
         #print(f"Relabeled Goals")
         #print(transitions["desired_goal"][:int(len(transitions["desired_goal"])*0.25)])
-        if self.dropout > 0.0:
-            choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
-            transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
+        #if self.dropout > 0.0:
+        #    choice = np.random.choice(batch_size, size=int(batch_size*self.dropout), replace=False)
+        #    transitions["desired_goal"][choice, 0] = [np.tile(np.array([-1., -1.]), self.env.envs[0].hist_len) for _ in range(len(choice))]
 
         # concatenate observation with (desired) goal
         observations = self._normalize_obs(transitions, maybe_vec_env)
